@@ -24,9 +24,14 @@ variable "zone" {
   }
 }
 
+data "template_file" "sa_token" {
+  template = file("gcp-default-key.json")
+}
+
 provider "google" {
   zone    = var.zone
   project = var.project_id
+  credentials = "${file("gcp-default-key.json")}"
 }
 
 data "google_compute_default_service_account" "default" {
