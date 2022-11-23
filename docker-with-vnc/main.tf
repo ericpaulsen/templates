@@ -2,17 +2,17 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "0.4.4"
+      version = "0.6.0"
     }
     docker = {
       source  = "kreuzwerker/docker"
-      version = "~> 2.20.0"
+      version = "~> 2.22.0"
     }
   }
 }
 
 provider "docker" {
-  host = "unix:///var/run/docker.sock"
+
 }
 
 provider "coder" {
@@ -27,21 +27,7 @@ variable "dotfiles_uri" {
 
   see https://dotfiles.github.io
   EOF
-  default = ""
-}
-
-variable "code-server" {
-  description = "code-server release"
-  default     = "4.5.1"
-  validation {
-    condition = contains([
-      "4.5.1",
-      "4.4.0",
-      "4.3.0",
-      "4.2.0"
-    ], var.code-server)
-    error_message = "Invalid code-server!"   
-}
+  default = "git@github.com:sharkymark/dotfiles.git"
 }
 
 resource "coder_agent" "dev" {
@@ -51,11 +37,11 @@ resource "coder_agent" "dev" {
 #!/bin/bash
 
 # install code-server
-curl -fsSL https://code-server.dev/install.sh | sh -s -- --version=${var.code-server} 2>&1 | tee code-server.log
-code-server --auth none --port 13337 2>&1 | tee -a code-server.log &
+curl -fsSL https://code-server.dev/install.sh | sh
+code-server --auth none --port 13337 &
 
 # use coder CLI to clone and install dotfiles
-coder dotfiles -y ${var.dotfiles_uri} 2>&1 | tee dotfiles-clone.log 
+coder dotfiles -y ${var.dotfiles_uri}
 
 # start VNC
 echo "Creating desktop..."
@@ -71,16 +57,34 @@ nohup supervisord
 
 resource "coder_app" "code-server" {
   agent_id = coder_agent.dev.id
+  slug          = "code-server"  
+  display_name  = "VS Code"
   url      = "http://localhost:13337/?folder=/home/coder"
   icon     = "/icon/code.svg"
+  subdomain = false
+  share     = "owner"
+
+  healthcheck {
+    url       = "http://localhost:13337/healthz"
+    interval  = 5
+    threshold = 15
+  }  
 }
 
 resource "coder_app" "novnc" {
   agent_id      = coder_agent.dev.id
-  name          = "noVNC Desktop"
-  icon          = "/icon/novnc-icon.svg"
+  slug          = "vnc"  
+  display_name  = "NoVNC Desktop"
+  icon          = "/icon/novnc.svg"
   url           = "http://localhost:6081"
-  relative_path = true
+  subdomain = false
+  share     = "owner"
+
+  healthcheck {
+    url       = "http://localhost:6081/healthz"
+    interval  = 5
+    threshold = 15
+  } 
 }
 
 resource "docker_image" "vnc" {
@@ -100,13 +104,13 @@ resource "docker_container" "workspace" {
   hostname = lower(data.coder_workspace.me.name)
   dns      = ["1.1.1.1"]
   # Use the docker gateway if the access URL is 127.0.0.1
-  # entrypoint = ["sh", "-c", replace(coder_agent.dev.init_script, "127.0.0.1", "host.docker.internal")]
+  #entrypoint = ["sh", "-c", replace(coder_agent.dev.init_script, "127.0.0.1", "host.docker.internal")]
 
   command = [
     "sh", "-c",
     <<EOT
     trap '[ $? -ne 0 ] && echo === Agent script exited with non-zero code. Sleeping infinitely to preserve logs... && sleep infinity' EXIT
-    ${replace(coder_agent.dev.init_script, "localhost", "host.docker.internal")}
+    ${replace(coder_agent.dev.init_script, "/localhost|127\\.0\\.0\\.1/", "host.docker.internal")}
     EOT
   ]
 

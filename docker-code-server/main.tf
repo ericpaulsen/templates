@@ -2,17 +2,17 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "~> 0.4.4"
+      version = "~> 0.6.0"
     }
     docker = {
       source  = "kreuzwerker/docker"
-      version = "~> 2.20.0"
+      version = "~> 2.22.0"
     }
   }
 }
 
 provider "docker" {
-  host = "unix:///var/run/docker.sock"
+
 }
 
 provider "coder" {
@@ -27,7 +27,7 @@ variable "dotfiles_uri" {
 
   see https://dotfiles.github.io
   EOF
-  default = ""
+  default = "git@github.com:sharkymark/dotfiles.git"
 }
 
 variable "image" {
@@ -53,15 +53,15 @@ variable "repo" {
   Code repository to clone
 
   EOF
-  default = "mark-theshark/commissions.git"
+  default = "coder/coder.git"
   validation {
     condition = contains([
-      "mark-theshark/coder-react.git",
-      "mark-theshark/commissions.git",
-      "mark-theshark/java_helloworld.git",
-      "mark-theshark/python-commissions.git",
-      "mark-theshark/pandas-automl.git",
-      "mark-theshark/rust-hw.git"
+      "sharkymark/coder-react.git",
+      "coder/coder.git", 
+      "sharkymark/java_helloworld.git", 
+      "sharkymark/python_commissions.git",                 
+      "sharkymark/pandas_automl.git",
+      "sharkymark/rust-hw.git"     
     ], var.repo)
     error_message = "Invalid repo!"   
 }  
@@ -73,6 +73,7 @@ variable "extension" {
   validation {
     condition = contains([
       "rust-lang.rust",
+      "eg2.vscode-npm-script",
       "matklad.rust-analyzer",
       "ms-python.python",
       "ms-toolsai.jupyter",
@@ -83,57 +84,44 @@ variable "extension" {
 }
 }
 
-locals {
-  code-server-releases = {
-    "4.5.0 | Code 1.68.1" = "4.5.0"
-    "4.4.0 | Code 1.66.2" = "4.4.0"
-    "4.3.0 | Code 1.65.2" = "4.3.0"
-    "4.2.0 | Code 1.64.2" = "4.2.0"
-  }
-}
-
-variable "code-server" {
-  description = "code-server release"
-  default     = "4.5.0 | Code 1.68.1"
-  validation {
-    condition = contains([
-      "4.5.0 | Code 1.68.1",
-      "4.4.0 | Code 1.66.2",
-      "4.3.0 | Code 1.65.2",
-      "4.2.0 | Code 1.64.2"
-    ], var.code-server)
-    error_message = "Invalid code-server!"   
-}
-}
-
 resource "coder_agent" "dev" {
   arch           = "amd64"
   os             = "linux"
   startup_script  = <<EOT
 #!/bin/bash
 
-# install code-server
-curl -fsSL https://code-server.dev/install.sh | sh -s -- --version=${lookup(local.code-server-releases, var.code-server)} 2>&1 | tee code-server.log
-code-server --auth none --port 13337 2>&1 | tee -a code-server.log &
-
 # clone repo
-ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
-git clone --progress git@github.com:${var.repo} 2>&1 | tee -a repo-clone.log
+mkdir -p ~/.ssh
+ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
+git clone git@github.com:${var.repo}
+
+# install code-server
+curl -fsSL https://code-server.dev/install.sh | sh
+code-server --auth none --port 13337 &
 
 # use coder CLI to clone and install dotfiles
-coder dotfiles -y ${var.dotfiles_uri} 2>&1 | tee dotfiles-clone.log 
+coder dotfiles -y ${var.dotfiles_uri}
 
 # install VS Code extension into code-server
-SERVICE_URL=https://open-vsx.org/vscode/gallery ITEM_URL=https://open-vsx.org/vscode/item code-server --install-extension ${var.extension} 2>&1 | tee extension-install.log
+SERVICE_URL=https://open-vsx.org/vscode/gallery ITEM_URL=https://open-vsx.org/vscode/item code-server --install-extension ${var.extension}
 
   EOT  
 }
 
 resource "coder_app" "code-server" {
   agent_id = coder_agent.dev.id
-  name     = "code-server ${var.code-server}"
+  slug          = "code-server"  
+  display_name  = "VS Code"
   url      = "http://localhost:13337/?folder=/home/coder"
   icon     = "/icon/code.svg"
+  subdomain = false
+  share     = "owner"
+
+  healthcheck {
+    url       = "http://localhost:13337/healthz"
+    interval  = 5
+    threshold = 15
+  }  
 }
 
 resource "docker_container" "workspace" {
@@ -143,16 +131,19 @@ resource "docker_container" "workspace" {
   name     = "coder-${data.coder_workspace.me.owner}-${lower(data.coder_workspace.me.name)}"
   hostname = lower(data.coder_workspace.me.name)
   dns      = ["1.1.1.1"]
-  # Use the docker gateway if the access URL is 127.0.0.1
-  # entrypoint = ["sh", "-c", replace(coder_agent.dev.init_script, "127.0.0.1", "host.docker.internal")]
 
+  # Use the docker gateway if the access URL is 127.0.0.1
+  #entrypoint = ["sh", "-c", replace(coder_agent.dev.init_script, "127.0.0.1", "host.docker.internal")]
+
+  # Use the docker gateway if the access URL is 127.0.0.1
   command = [
     "sh", "-c",
     <<EOT
     trap '[ $? -ne 0 ] && echo === Agent script exited with non-zero code. Sleeping infinitely to preserve logs... && sleep infinity' EXIT
-    ${replace(coder_agent.dev.init_script, "localhost", "host.docker.internal")}
+    ${replace(coder_agent.dev.init_script, "/localhost|127\\.0\\.0\\.1/", "host.docker.internal")}
     EOT
   ]
+
 
   env        = ["CODER_AGENT_TOKEN=${coder_agent.dev.token}"]
   volumes {

@@ -2,11 +2,11 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "0.4.2"
+      version = "0.6.0"
     }
     google = {
       source  = "hashicorp/google"
-      version = "~> 4.15"
+      version = "~> 4.42.0"
     }
   }
 }
@@ -24,14 +24,10 @@ variable "zone" {
   }
 }
 
-data "template_file" "sa_token" {
-  template = file("gcp-default-key.json")
-}
-
 provider "google" {
-  zone    = var.zone
-  project = var.project_id
-  credentials = "${file("gcp-default-key.json")}"
+  zone        = var.zone
+  project     = var.project_id
+  credentials = file("gcp-default-key.json")
 }
 
 data "google_compute_default_service_account" "default" {
@@ -43,55 +39,69 @@ variable "dotfiles_uri" {
 
   see https://dotfiles.github.io
   EOF
-  default = ""
+  default     = "git@github.com:sharkymark/dotfiles.git"
 }
-
 data "coder_workspace" "me" {
 }
 
 resource "google_compute_disk" "root" {
-  name  = "coder-${data.coder_workspace.me.owner}-${data.coder_workspace.me.name}-root"
-  type  = "pd-ssd"
-  zone  = var.zone
+  name = "coder-${data.coder_workspace.me.owner}-${data.coder_workspace.me.name}-root"
+  type = "pd-ssd"
+  zone = var.zone
   #image = "debian-cloud/debian-9"
-  image = "projects/coder-demo-1/global/images/coder-ubuntu-2004-lts-with-docker-engine"
+  image = "https://www.googleapis.com/compute/v1/projects/coder-demo-1/global/images/coder-ubuntu-2004-lts-with-docker-engine"
+  #image = "projects/coder-demo-1/global/images/coder-ubuntu-2004-lts-with-docker-engine"
   lifecycle {
     ignore_changes = [image]
   }
 }
 
 resource "coder_agent" "dev" {
-  auth = "google-instance-identity"
-  arch = "amd64"
-  os   = "linux"
+  auth           = "google-instance-identity"
+  arch           = "amd64"
+  os             = "linux"
   startup_script = <<EOT
 #!/bin/bash
 
-# use coder CLI to clone and install dotfiles
+# clone repo
+mkdir -p ~/.ssh
+ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
+git clone --progress git@github.com:sharkymark/flask-redis-docker-compose.git
 
-coder dotfiles -y ${var.dotfiles_uri} 2>&1 > ~/dotfiles.log
+# use coder CLI to clone and install dotfiles
+coder dotfiles -y ${var.dotfiles_uri}
 
 # install and start code-server
 curl -fsSL https://code-server.dev/install.sh | sh
 code-server --auth none --port 13337 &
 
+DEBIAN_FRONTEND=noninteractive sudo apt install docker-compose &
+
 EOT
-}  
+}
 
 # code-server
 resource "coder_app" "code-server" {
-  agent_id      = coder_agent.dev.id
-  name          = "code-server"
-  icon          = "/icon/code.svg"
-  url           = "http://localhost:13337?folder=/home/coder"
-  relative_path = true  
+  agent_id     = coder_agent.dev.id
+  slug         = "code-server"
+  display_name = "VS Code"
+  icon         = "/icon/code.svg"
+  url          = "http://localhost:13337?folder=/home/coder"
+  subdomain    = false
+  share        = "owner"
+
+  healthcheck {
+    url       = "http://localhost:13337/healthz"
+    interval  = 6
+    threshold = 20
+  }
 }
 
 resource "google_compute_instance" "dev" {
   zone         = var.zone
   count        = data.coder_workspace.me.start_count
   name         = "coder-${data.coder_workspace.me.owner}-${data.coder_workspace.me.name}"
-  machine_type = "e2-micro"
+  machine_type = var.machine-type
   network_interface {
     network = "default"
     access_config {
@@ -124,3 +134,25 @@ export HOME=/root
 
 EOMETA
 }
+
+resource "coder_metadata" "workspace_info" {
+  count       = data.coder_workspace.me.start_count
+  resource_id = google_compute_instance.dev[0].id
+  item {
+    key   = "zone"
+    value = var.zone
+  }
+  item {
+    key   = "machine-type"
+    value = var.machine-type
+  }
+  item {
+    key   = "image"
+    value = "coder-ubuntu-2004-lts-with-docker-engine"
+  }
+  item {
+    key   = "repo"
+    value = "git@github.com:sharkymark/flask-redis-docker-compose.git"
+  }
+}
+

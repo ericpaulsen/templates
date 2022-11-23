@@ -2,11 +2,11 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "~> 0.4.2"
+      version = "~> 0.6.0"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 2.11"
+      version = "~> 2.12.1"
     }   
   }
 }
@@ -27,10 +27,12 @@ variable "use_kubeconfig" {
 
 
 variable "workspaces_namespace" {
-  type        = string
-  sensitive   = true
-  description = "The namespace to create workspaces in (must exist prior to creating workspaces)"
-  default     = "oss"
+  description = <<-EOF
+  Kubernetes namespace to deploy the workspace into
+
+  EOF
+  default     = ""  
+
 }
 
 provider "kubernetes" {
@@ -46,21 +48,7 @@ variable "dotfiles_uri" {
 
   see https://dotfiles.github.io
   EOF
-  default = ""
-}
-
-variable "image" {
-  description = <<-EOF
-  Container images from coder-com
-
-  EOF
-  default = "marktmilligan/applications:latest"
-  validation {
-    condition = contains([
-      "marktmilligan/applications:latest"
-    ], var.image)
-    error_message = "Invalid image!"   
-}  
+  default = "git@github.com:sharkymark/dotfiles.git"
 }
 
 variable "cpu" {
@@ -91,20 +79,6 @@ variable "memory" {
 }
 }
 
-variable "code-server" {
-  description = "code-server release"
-  default     = "4.5.0"
-  validation {
-    condition = contains([
-      "4.5.0",
-      "4.4.0",
-      "4.3.0",
-      "4.2.0"
-    ], var.code-server)
-    error_message = "Invalid code-server!"
-  }  
-}
-
 variable "disk_size" {
   description = "Disk size (__ GB)"
   default     = 10
@@ -118,11 +92,16 @@ resource "coder_agent" "coder" {
 #!/bin/bash
 
 # install code-server
-curl -fsSL https://code-server.dev/install.sh | sh -s -- --version=${var.code-server} 2>&1 | tee ~/code-server.log
-code-server --auth none --port 13337 2>&1 | tee -a ~/code-server.log &
+curl -fsSL https://code-server.dev/install.sh | sh
+code-server --auth none --port 13337 &
 
 # use coder CLI to clone and install dotfiles
-coder dotfiles -y ${var.dotfiles_uri} 2>&1 | tee ~/dotfiles.log
+coder dotfiles -y ${var.dotfiles_uri}
+
+# clone repo
+mkdir -p ~/.ssh
+ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
+git clone --progress git@github.com:coder/coder.git &
 
 # start VNC
 echo "Creating desktop..."
@@ -136,21 +115,36 @@ nohup supervisord
   EOT  
 }
 
-# code-server
 resource "coder_app" "code-server" {
-  agent_id      = coder_agent.coder.id
-  name          = "code-server ${var.code-server}"
-  icon          = "/icon/code.svg"
-  url           = "http://localhost:13337?folder=/home/coder"
-  relative_path = true  
+  agent_id = coder_agent.coder.id
+  slug          = "code-server"  
+  display_name  = "VS Code"
+  url      = "http://localhost:13337/?folder=/home/coder"
+  icon     = "/icon/code.svg"
+  subdomain = false
+  share     = "owner"
+
+  healthcheck {
+    url       = "http://localhost:13337/healthz"
+    interval  = 5
+    threshold = 15
+  }  
 }
 
 resource "coder_app" "novnc" {
   agent_id      = coder_agent.coder.id
-  name          = "noVNC Desktop"
-  icon          = "/icon/novnc-icon.svg"
+  slug          = "vnc"  
+  display_name  = "NoVNC Desktop"
+  icon          = "/icon/novnc.svg"
   url           = "http://localhost:6081"
-  relative_path = true
+  subdomain = false
+  share     = "owner"
+
+  healthcheck {
+    url       = "http://localhost:6081/healthz"
+    interval  = 5
+    threshold = 15
+  } 
 }
 
 resource "kubernetes_pod" "main" {
@@ -169,7 +163,7 @@ resource "kubernetes_pod" "main" {
     }    
     container {
       name    = "coder-container"
-      image   = "docker.io/${var.image}"
+      image   = "docker.io/marktmilligan/applications:latest"
       command = ["sh", "-c", coder_agent.coder.init_script]
       security_context {
         run_as_user = "1000"
@@ -215,4 +209,29 @@ resource "kubernetes_persistent_volume_claim" "home-directory" {
       }
     }
   }
+}
+
+resource "coder_metadata" "workspace_info" {
+  count       = data.coder_workspace.me.start_count
+  resource_id = kubernetes_pod.main[0].id
+  item {
+    key   = "CPU"
+    value = "${kubernetes_pod.main[0].spec[0].container[0].resources[0].limits.cpu} cores"
+  }
+  item {
+    key   = "memory"
+    value = "${var.memory}GB"
+  }  
+  item {
+    key   = "image"
+    value = "${kubernetes_pod.main[0].spec[0].container[0].image}"
+  } 
+  item {
+    key   = "disk"
+    value = "${var.disk_size}GiB"
+  }
+  item {
+    key   = "volume"
+    value = kubernetes_pod.main[0].spec[0].container[0].volume_mount[0].mount_path
+  }  
 }
