@@ -1,5 +1,20 @@
 # Changelog
 
+01-19-23 mark@coder.com
+1. Added A LOT of emojis
+
+01-02-23 mark@coder.com
+1. Updated pod-docker-side-car with correct group security context in pod spec
+
+12-17-22 mark@coder.com
+1. added a Docker side-car pod template and a Docker side-car Docker template (so you do not have to use sysbox)
+
+12-3-22 mark@coder.com
+1. added a Google Cloud Windows and Visual Studio template which prompts user for WinOS and VS release
+
+11-25-22 mark@coder.com
+1. added another docker-in-pod template using the updated Kubernetes Terraform provider.
+
 11-23-22 mark@coder.com
 1. created a new Visual Studio, Windows AWS EC2 template.
 

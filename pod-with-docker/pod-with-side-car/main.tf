@@ -5,8 +5,8 @@ terraform {
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 2.12.1"
-    }   
+      version = "~> 2.16.0"
+    }  
   }
 }
 
@@ -24,12 +24,14 @@ variable "use_kubeconfig" {
   EOF
 }
 
+
 variable "workspaces_namespace" {
   description = <<-EOF
   Kubernetes namespace to deploy the workspace into
 
   EOF
-  default = ""
+  default     = ""  
+
 }
 
 provider "kubernetes" {
@@ -53,6 +55,7 @@ variable "cpu" {
   default     = 4
   validation {
     condition = contains([
+      "1",
       "2",
       "4",
       "6"
@@ -63,59 +66,34 @@ variable "cpu" {
 
 variable "memory" {
   description = "Memory (__ GB)"
-  default     = 8
+  default     = 4
   validation {
     condition = contains([
+      "1",
+      "2",
       "4",
-      "6",
       "8"
     ], var.memory)
     error_message = "Invalid memory!"  
 }
 }
 
-locals {
-  repo = {
-    "Java" = "sharkymark/java_helloworld.git" 
-    "Python" = "sharkymark/python_commissions.git" 
-    "Go" = "coder/coder.git"
-  }  
-  image = {
-    "Java" = "codercom/enterprise-java:ubuntu" 
-    "Python" = "codercom/enterprise-base:ubuntu" 
-    "Go" = "codercom/enterprise-golang:ubuntu"
-  }  
-}
-
-variable "lang" {
-  description = "Programming language"
-  default     = "Java"
-  validation {
-    condition = contains([
-      "Go",
-      "Python",      
-      "Java"
-    ], var.lang)
-    error_message = "Invalid language!"   
-}
-}
-
 variable "disk_size" {
   description = "Disk size (__ GB)"
-  default     = 10
+  default     = 50
 }
 
-resource "coder_agent" "dev" {
+resource "coder_agent" "coder" {
   os   = "linux"
   arch = "amd64"
   dir = "/home/coder"
   startup_script = <<EOT
 #!/bin/bash
 
-# clone repo
+# clone coder/coder repo
 mkdir -p ~/.ssh
 ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
-git clone --progress git@github.com:${lookup(local.repo, var.lang)}
+git clone --progress git@github.com:coder/coder.git
 
 # use coder CLI to clone and install dotfiles
 coder dotfiles -y ${var.dotfiles_uri}
@@ -129,7 +107,7 @@ code-server --auth none --port 13337 &
 
 # code-server
 resource "coder_app" "code-server" {
-  agent_id      = coder_agent.dev.id
+  agent_id      = coder_agent.coder.id
   slug          = "code-server"  
   display_name  = "VS Code"
   icon          = "/icon/code.svg"
@@ -153,27 +131,40 @@ resource "kubernetes_pod" "main" {
     name = "coder-${data.coder_workspace.me.owner}-${data.coder_workspace.me.name}"
     namespace = var.workspaces_namespace
   }
-  spec {
+  spec { 
     security_context {
-      run_as_user = "1000"
       fs_group    = "1000"
-    }    
+    }      
+    # Run a privileged dind (Docker in Docker) container
     container {
-      name    = "coder-container"
-      image   = "docker.io/${lookup(local.image, var.lang)}"
+      name  = "docker-sidecar"
+      image = "docker:dind"
+      security_context {
+        privileged = true
+      }
+      command = ["dockerd", "-H", "tcp://127.0.0.1:2375"]
+    }         
+    container {
+      name    = "go-container"
+      image   = "docker.io/codercom/enterprise-golang:ubuntu"
       image_pull_policy = "Always"
-      command = ["sh", "-c", coder_agent.dev.init_script]
+      command = ["sh", "-c", coder_agent.coder.init_script]
       security_context {
         run_as_user = "1000"
       }      
       env {
         name  = "CODER_AGENT_TOKEN"
-        value = coder_agent.dev.token
+        value = coder_agent.coder.token
       }  
+      # Use the Docker daemon in the "docker-sidecar" container
+      env {
+        name  = "DOCKER_HOST"
+        value = "localhost:2375" 
+      }     
       resources {
         requests = {
-          cpu    = "250m"
-          memory = "1G"
+          cpu    = "500m"
+          memory = "500Mi"
         }        
         limits = {
           cpu    = "${var.cpu}"
@@ -213,35 +204,31 @@ resource "coder_metadata" "workspace_info" {
   count       = data.coder_workspace.me.start_count
   resource_id = kubernetes_pod.main[0].id
   item {
-    key   = "CPU limits"
+    key   = "CPU"
     value = "${var.cpu} cores"
   }
   item {
-    key   = "memory limits"
+    key   = "memory"
     value = "${var.memory}GB"
-  } 
-  item {
-    key   = "CPU requests"
-    value = "${kubernetes_pod.main[0].spec[0].container[0].resources[0].requests.cpu}"
-  }
-  item {
-    key   = "memory requests"
-    value = "${kubernetes_pod.main[0].spec[0].container[0].resources[0].requests.memory}"
-  }    
-  item {
-    key   = "image"
-    value = "docker.io/${lookup(local.image, var.lang)}"
-  }
-  item {
-    key   = "repo cloned"
-    value = "docker.io/${lookup(local.repo, var.lang)}"
   }  
   item {
     key   = "disk"
     value = "${var.disk_size}GiB"
+  }   
+  item {
+    key   = "container-1"
+    value = "${kubernetes_pod.main[0].spec[0].container[0].name}"
+  }  
+  item {
+    key   = "container-2"
+    value = "${kubernetes_pod.main[0].spec[0].container[1].name}"
+  }    
+  item {
+    key   = "image"
+    value = "docker.io/codercom/enterprise-golang:ubuntu"
   }
   item {
-    key   = "volume"
-    value = kubernetes_pod.main[0].spec[0].container[0].volume_mount[0].mount_path
-  }  
+    key   = "repo cloned"
+    value = "docker.io/coder/coder.git"
+  }     
 }
