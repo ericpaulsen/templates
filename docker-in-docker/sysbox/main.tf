@@ -2,7 +2,7 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "~> 0.6.0"
+      version = "~> 0.6.9"
     }
     docker = {
       source  = "kreuzwerker/docker"
@@ -27,7 +27,7 @@ variable "dotfiles_uri" {
 
   see https://dotfiles.github.io
   EOF
-  default = "git@github.com:sharkymark/dotfiles.git"
+  default     = "git@github.com:sharkymark/dotfiles.git"
 }
 
 variable "image" {
@@ -35,7 +35,7 @@ variable "image" {
   Container images from coder-com
 
   EOF
-  default = "codercom/enterprise-golang:ubuntu"
+  default     = "codercom/enterprise-golang:ubuntu"
   validation {
     condition = contains([
       "codercom/enterprise-node:ubuntu",
@@ -44,8 +44,8 @@ variable "image" {
       "codercom/enterprise-base:ubuntu",
       "marktmilligan/clion-rust:latest"
     ], var.image)
-    error_message = "Invalid image!"   
-}  
+    error_message = "Invalid image!"
+  }
 }
 
 variable "repo" {
@@ -53,18 +53,18 @@ variable "repo" {
   Code repository to clone
 
   EOF
-  default = "coder/coder.git"
+  default     = "coder/coder.git"
   validation {
     condition = contains([
       "sharkymark/coder-react.git",
-      "coder/coder.git", 
-      "sharkymark/java_helloworld.git", 
-      "sharkymark/python_commissions.git",                 
+      "coder/coder.git",
+      "sharkymark/java_helloworld.git",
+      "sharkymark/python_commissions.git",
       "sharkymark/pandas_automl.git",
-      "sharkymark/rust-hw.git"     
+      "sharkymark/rust-hw.git"
     ], var.repo)
-    error_message = "Invalid repo!"   
-}  
+    error_message = "Invalid repo!"
+  }
 }
 
 variable "extension" {
@@ -80,14 +80,14 @@ variable "extension" {
       "redhat.java",
       "golang.go"
     ], var.extension)
-    error_message = "Invalid VS Code extension!"  
-}
+    error_message = "Invalid VS Code extension!"
+  }
 }
 
 resource "coder_agent" "dev" {
   arch           = "amd64"
   os             = "linux"
-  startup_script  = <<EOT
+  startup_script = <<EOT
 #!/bin/bash
 
 # Start Docker
@@ -115,24 +115,24 @@ SERVICE_URL=https://open-vsx.org/vscode/gallery ITEM_URL=https://open-vsx.org/vs
 }
 
 resource "coder_app" "code-server" {
-  agent_id = coder_agent.dev.id
-  slug          = "code-server"  
-  display_name  = "VS Code"
-  url      = "http://localhost:13337/?folder=/home/coder"
-  icon     = "/icon/code.svg"
-  subdomain = false
-  share     = "owner"
+  agent_id     = coder_agent.dev.id
+  slug         = "code-server"
+  display_name = "VS Code"
+  url          = "http://localhost:13337/?folder=/home/coder"
+  icon         = "/icon/code.svg"
+  subdomain    = false
+  share        = "owner"
 
   healthcheck {
     url       = "http://localhost:13337/healthz"
     interval  = 5
     threshold = 15
-  }  
+  }
 }
 
 resource "docker_container" "workspace" {
   count = data.coder_workspace.me.start_count
-  image = "${var.image}"
+  image = var.image
   # Uses lower() to avoid Docker restriction on container names.
   name     = "coder-${data.coder_workspace.me.owner}-${lower(data.coder_workspace.me.name)}"
   hostname = lower(data.coder_workspace.me.name)
@@ -151,12 +151,12 @@ resource "docker_container" "workspace" {
   ]
   # required for sysbox runc to be used
   runtime = "sysbox-runc"
-  env        = ["CODER_AGENT_TOKEN=${coder_agent.dev.token}"]
+  env     = ["CODER_AGENT_TOKEN=${coder_agent.dev.token}"]
   volumes {
     container_path = "/home/coder/"
     volume_name    = docker_volume.coder_volume.name
     read_only      = false
-  }  
+  }
   host {
     host = "host.docker.internal"
     ip   = "host-gateway"

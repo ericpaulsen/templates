@@ -2,7 +2,7 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "~> 0.6.0"
+      version = "~> 0.6.9"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
@@ -32,7 +32,7 @@ variable "workspaces_namespace" {
   Kubernetes namespace to deploy the workspace into
 
   EOF
-  default     = ""  
+  default     = ""
 
 }
 
@@ -53,8 +53,8 @@ variable "cpu" {
       "6",
       "8"
     ], var.cpu)
-    error_message = "Invalid cpu!"   
-}
+    error_message = "Invalid cpu!"
+  }
 }
 
 variable "memory" {
@@ -69,8 +69,8 @@ variable "memory" {
       "10",
       "12"
     ], var.memory)
-    error_message = "Invalid memory!"  
-}
+    error_message = "Invalid memory!"
+  }
 }
 
 variable "disk_size" {
@@ -125,52 +125,52 @@ resource "coder_agent" "dev" {
 
 # code-server
 resource "coder_app" "code-server" {
-  agent_id = coder_agent.dev.id
-  slug          = "code-server"  
-  display_name  = "VS Code"  
-  icon     = "/icon/code.svg"
-  url      = "http://localhost:13337"
-  subdomain = false
-  share     = "owner"
+  agent_id     = coder_agent.dev.id
+  slug         = "code-server"
+  display_name = "VS Code"
+  icon         = "/icon/code.svg"
+  url          = "http://localhost:13337"
+  subdomain    = false
+  share        = "owner"
 
   healthcheck {
     url       = "http://localhost:13337/healthz"
     interval  = 3
     threshold = 10
-  }  
+  }
 
 }
 
 resource "coder_app" "pycharm1" {
-  agent_id = coder_agent.dev.id
-  slug          = "pycharm1"  
-  display_name  = "PyCharm 1"  
-  icon          = "/icon/pycharm.svg"
-  url           = "http://localhost:9001"
-  subdomain     = false
-  share         = "owner"
+  agent_id     = coder_agent.dev.id
+  slug         = "pycharm1"
+  display_name = "PyCharm 1"
+  icon         = "/icon/pycharm.svg"
+  url          = "http://localhost:9001"
+  subdomain    = false
+  share        = "owner"
 
   healthcheck {
-    url         = "http://localhost:9001/healthz"
-    interval    = 6
-    threshold   = 20
-  }    
+    url       = "http://localhost:9001/healthz"
+    interval  = 6
+    threshold = 20
+  }
 }
 
 resource "coder_app" "pycharm2" {
-  agent_id = coder_agent.dev.id
-  slug          = "pycharm2"  
-  display_name  = "PyCharm 2"  
-  icon          = "/icon/pycharm.svg"
-  url           = "http://localhost:9001"
-  subdomain     = false
-  share         = "owner"
+  agent_id     = coder_agent.dev.id
+  slug         = "pycharm2"
+  display_name = "PyCharm 2"
+  icon         = "/icon/pycharm.svg"
+  url          = "http://localhost:9001"
+  subdomain    = false
+  share        = "owner"
 
   healthcheck {
-    url         = "http://localhost:9002/healthz"
-    interval    = 6
-    threshold   = 20
-  }    
+    url       = "http://localhost:9002/healthz"
+    interval  = 6
+    threshold = 20
+  }
 }
 
 resource "kubernetes_pod" "main" {
@@ -188,10 +188,10 @@ resource "kubernetes_pod" "main" {
       fs_group    = 1000
     }
     container {
-      name    = "dev"
-      image   = "docker.io/marktmilligan/pycharm-community:latest"
-      image_pull_policy = "Always"       
-      command = ["sh", "-c", coder_agent.dev.init_script]
+      name              = "dev"
+      image             = "docker.io/marktmilligan/pycharm-community:latest"
+      image_pull_policy = "Always"
+      command           = ["sh", "-c", coder_agent.dev.init_script]
       security_context {
         run_as_user = "1000"
       }
@@ -203,12 +203,12 @@ resource "kubernetes_pod" "main" {
         requests = {
           cpu    = "500m"
           memory = "500Mi"
-        }        
+        }
         limits = {
           cpu    = "${var.cpu}"
           memory = "${var.memory}G"
         }
-      }      
+      }
       volume_mount {
         mount_path = "/home/coder"
         name       = "home-directory"
@@ -243,8 +243,8 @@ resource "coder_metadata" "workspace_info" {
   resource_id = kubernetes_pod.main[0].id
   item {
     key   = "kubernetes namespace"
-    value = "${var.workspaces_namespace}"
-  }    
+    value = var.workspaces_namespace
+  }
   item {
     key   = "CPU (limits, requests)"
     value = "${var.cpu} cores, ${kubernetes_pod.main[0].spec[0].container[0].resources[0].requests.cpu}"
@@ -252,7 +252,7 @@ resource "coder_metadata" "workspace_info" {
   item {
     key   = "memory (limits, requests)"
     value = "${var.memory}GB, ${kubernetes_pod.main[0].spec[0].container[0].resources[0].requests.memory}"
-  }  
+  }
   item {
     key   = "image"
     value = kubernetes_pod.main[0].spec[0].container[0].image
@@ -260,7 +260,7 @@ resource "coder_metadata" "workspace_info" {
   item {
     key   = "container image pull policy"
     value = kubernetes_pod.main[0].spec[0].container[0].image_pull_policy
-  }   
+  }
   item {
     key   = "disk"
     value = "${var.disk_size}GiB"
@@ -268,13 +268,13 @@ resource "coder_metadata" "workspace_info" {
   item {
     key   = "volume"
     value = kubernetes_pod.main[0].spec[0].container[0].volume_mount[0].mount_path
-  }  
+  }
   item {
     key   = "security context - container"
     value = "run_as_user ${kubernetes_pod.main[0].spec[0].container[0].security_context[0].run_as_user}"
-  }   
+  }
   item {
     key   = "security context - pod"
     value = "run_as_user ${kubernetes_pod.main[0].spec[0].security_context[0].run_as_user} fs_group ${kubernetes_pod.main[0].spec[0].security_context[0].fs_group}"
-  }     
+  }
 }

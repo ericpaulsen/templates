@@ -2,7 +2,7 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "~> 0.6.0"
+      version = "~> 0.6.9"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
@@ -30,7 +30,7 @@ variable "workspaces_namespace" {
   Kubernetes namespace to create the workspace pod (required)
 
   EOF
-  default = ""
+  default     = ""
 }
 
 variable "dotfiles_uri" {
@@ -39,7 +39,7 @@ variable "dotfiles_uri" {
 
   see https://dotfiles.github.io
   EOF
-  default = "git@github.com:sharkymark/dotfiles.git"
+  default     = "git@github.com:sharkymark/dotfiles.git"
 }
 
 variable "cpu" {
@@ -52,8 +52,8 @@ variable "cpu" {
       "4",
       "6"
     ], var.cpu)
-    error_message = "Invalid cpu!"   
-}
+    error_message = "Invalid cpu!"
+  }
 }
 
 variable "memory" {
@@ -66,8 +66,8 @@ variable "memory" {
       "4",
       "8"
     ], var.memory)
-    error_message = "Invalid memory!"  
-}
+    error_message = "Invalid memory!"
+  }
 }
 
 variable "disk_size" {
@@ -83,9 +83,9 @@ provider "kubernetes" {
 data "coder_workspace" "me" {}
 
 resource "coder_agent" "coder" {
-  os   = "linux"
-  arch = "amd64"
-  dir = "/home/coder"
+  os             = "linux"
+  arch           = "amd64"
+  dir            = "/home/coder"
   startup_script = <<EOT
 #!/bin/bash
 
@@ -115,53 +115,53 @@ EOT
 
 # code-server
 resource "coder_app" "code-server" {
-  agent_id      = coder_agent.coder.id
-  slug          = "code-server"  
-  display_name  = "VS Code"
-  icon          = "/icon/code.svg"
-  url           = "http://localhost:13337?folder=/home/coder"
-  subdomain = false
-  share     = "owner"
+  agent_id     = coder_agent.coder.id
+  slug         = "code-server"
+  display_name = "VS Code"
+  icon         = "/icon/code.svg"
+  url          = "http://localhost:13337?folder=/home/coder"
+  subdomain    = false
+  share        = "owner"
 
   healthcheck {
     url       = "http://localhost:13337/healthz"
     interval  = 3
     threshold = 10
-  } 
+  }
 }
 
 # airflow
 resource "coder_app" "airflow" {
-  agent_id      = coder_agent.coder.id
-  slug          = "airflow"  
-  display_name  = "Airflow"
-  icon          = "https://upload.wikimedia.org/wikipedia/commons/d/de/AirflowLogo.png"
-  url           = "http://localhost:8080"
-  subdomain = true
-  share     = "owner"
+  agent_id     = coder_agent.coder.id
+  slug         = "airflow"
+  display_name = "Airflow"
+  icon         = "https://upload.wikimedia.org/wikipedia/commons/d/de/AirflowLogo.png"
+  url          = "http://localhost:8080"
+  subdomain    = true
+  share        = "owner"
 
   healthcheck {
     url       = "http://localhost:8080/healthz"
     interval  = 10
     threshold = 60
-  } 
+  }
 }
 
 resource "kubernetes_pod" "main" {
   count = data.coder_workspace.me.start_count
   metadata {
-    name = "coder-${data.coder_workspace.me.owner}-${lower(data.coder_workspace.me.name)}"
+    name      = "coder-${data.coder_workspace.me.owner}-${lower(data.coder_workspace.me.name)}"
     namespace = var.workspaces_namespace
   }
   spec {
     security_context {
       run_as_user = "1000"
       fs_group    = "1000"
-    }     
+    }
     container {
-      name    = "airflow"
-      image   = "docker.io/codercom/enterprise-base:ubuntu"
-      command = ["sh", "-c", coder_agent.coder.init_script]
+      name              = "airflow"
+      image             = "docker.io/codercom/enterprise-base:ubuntu"
+      command           = ["sh", "-c", coder_agent.coder.init_script]
       image_pull_policy = "Always"
       security_context {
         run_as_user = "1000"
@@ -174,23 +174,23 @@ resource "kubernetes_pod" "main" {
         requests = {
           cpu    = "250m"
           memory = "250Mi"
-        }        
+        }
         limits = {
           cpu    = "${var.cpu}"
           memory = "${var.memory}G"
         }
-      }                       
+      }
       volume_mount {
         mount_path = "/home/coder"
         name       = "home-directory"
-      }        
+      }
     }
     volume {
       name = "home-directory"
       persistent_volume_claim {
         claim_name = kubernetes_persistent_volume_claim.home-directory.metadata.0.name
       }
-    }         
+    }
   }
 }
 
@@ -219,11 +219,11 @@ resource "coder_metadata" "workspace_info" {
   item {
     key   = "memory"
     value = "${var.memory}GB"
-  }  
+  }
   item {
     key   = "image"
     value = "codercom/enterprise-base:ubuntu"
-  } 
+  }
   item {
     key   = "disk"
     value = "${var.disk_size}GiB"
@@ -231,5 +231,5 @@ resource "coder_metadata" "workspace_info" {
   item {
     key   = "volume"
     value = kubernetes_pod.main[0].spec[0].container[0].volume_mount[0].mount_path
-  }  
+  }
 }

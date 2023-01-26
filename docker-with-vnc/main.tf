@@ -2,7 +2,7 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "0.6.0"
+      version = "0.6.9"
     }
     docker = {
       source  = "kreuzwerker/docker"
@@ -27,13 +27,13 @@ variable "dotfiles_uri" {
 
   see https://dotfiles.github.io
   EOF
-  default = "git@github.com:sharkymark/dotfiles.git"
+  default     = "git@github.com:sharkymark/dotfiles.git"
 }
 
 resource "coder_agent" "dev" {
   arch           = "amd64"
   os             = "linux"
-  startup_script  = <<EOT
+  startup_script = <<EOT
 #!/bin/bash
 
 # install code-server
@@ -56,41 +56,41 @@ nohup supervisord
 }
 
 resource "coder_app" "code-server" {
-  agent_id = coder_agent.dev.id
-  slug          = "code-server"  
-  display_name  = "VS Code"
-  url      = "http://localhost:13337/?folder=/home/coder"
-  icon     = "/icon/code.svg"
-  subdomain = false
-  share     = "owner"
+  agent_id     = coder_agent.dev.id
+  slug         = "code-server"
+  display_name = "VS Code"
+  url          = "http://localhost:13337/?folder=/home/coder"
+  icon         = "/icon/code.svg"
+  subdomain    = false
+  share        = "owner"
 
   healthcheck {
     url       = "http://localhost:13337/healthz"
     interval  = 5
     threshold = 15
-  }  
+  }
 }
 
 resource "coder_app" "novnc" {
-  agent_id      = coder_agent.dev.id
-  slug          = "vnc"  
-  display_name  = "NoVNC Desktop"
-  icon          = "/icon/novnc.svg"
-  url           = "http://localhost:6081"
-  subdomain = false
-  share     = "owner"
+  agent_id     = coder_agent.dev.id
+  slug         = "vnc"
+  display_name = "NoVNC Desktop"
+  icon         = "/icon/novnc.svg"
+  url          = "http://localhost:6081"
+  subdomain    = false
+  share        = "owner"
 
   healthcheck {
     url       = "http://localhost:6081/healthz"
     interval  = 5
     threshold = 15
-  } 
+  }
 }
 
 resource "docker_image" "vnc" {
   name = "vnc:latest"
   build {
-    path  = "./image/"
+    path = "./image/"
     #tag   = ["vnc:latest"]
   }
   #keep_locally = true
@@ -114,12 +114,12 @@ resource "docker_container" "workspace" {
     EOT
   ]
 
-  env        = ["CODER_AGENT_TOKEN=${coder_agent.dev.token}"]
+  env = ["CODER_AGENT_TOKEN=${coder_agent.dev.token}"]
   volumes {
     container_path = "/home/coder/"
     volume_name    = docker_volume.coder_volume.name
     read_only      = false
-  }  
+  }
   host {
     host = "host.docker.internal"
     ip   = "host-gateway"

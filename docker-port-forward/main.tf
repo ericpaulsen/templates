@@ -2,7 +2,7 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "~> 0.6.0"
+      version = "~> 0.6.9"
     }
     docker = {
       source  = "kreuzwerker/docker"
@@ -27,13 +27,13 @@ variable "dotfiles_uri" {
 
   see https://dotfiles.github.io
   EOF
-  default = "git@github.com:sharkymark/dotfiles.git"
+  default     = "git@github.com:sharkymark/dotfiles.git"
 }
 
 resource "coder_agent" "dev" {
   arch           = "amd64"
   os             = "linux"
-  startup_script  = <<EOT
+  startup_script = <<EOT
 #!/bin/bash
 
 # clone repo
@@ -56,36 +56,36 @@ yarn &
 }
 
 resource "coder_app" "code-server" {
-  agent_id = coder_agent.dev.id
-  slug          = "code-server"  
-  display_name  = "VS Code"
-  url      = "http://localhost:13337/?folder=/home/coder"
-  icon     = "/icon/code.svg"
-  subdomain = false
-  share     = "owner"
+  agent_id     = coder_agent.dev.id
+  slug         = "code-server"
+  display_name = "VS Code"
+  url          = "http://localhost:13337/?folder=/home/coder"
+  icon         = "/icon/code.svg"
+  subdomain    = false
+  share        = "owner"
 
   healthcheck {
     url       = "http://localhost:13337/healthz"
     interval  = 5
     threshold = 15
-  }  
+  }
 }
 
 # node app
 resource "coder_app" "node-react-app" {
-  agent_id = coder_agent.dev.id
-  slug          = "node-app"  
-  display_name  = "Node React app"
-  icon     = "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/React-icon.svg/2300px-React-icon.svg.png"
-  url      = "http://localhost:3000"
-  subdomain = true
-  share     = "authenticated"
+  agent_id     = coder_agent.dev.id
+  slug         = "node-app"
+  display_name = "Node React app"
+  icon         = "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/React-icon.svg/2300px-React-icon.svg.png"
+  url          = "http://localhost:3000"
+  subdomain    = true
+  share        = "authenticated"
 
   healthcheck {
     url       = "http://localhost:3000/healthz"
     interval  = 10
     threshold = 30
-  }  
+  }
 
 }
 
@@ -110,12 +110,12 @@ resource "docker_container" "workspace" {
   ]
 
 
-  env        = ["CODER_AGENT_TOKEN=${coder_agent.dev.token}"]
+  env = ["CODER_AGENT_TOKEN=${coder_agent.dev.token}"]
   volumes {
     container_path = "/home/coder/"
     volume_name    = docker_volume.coder_volume.name
     read_only      = false
-  }  
+  }
   host {
     host = "host.docker.internal"
     ip   = "host-gateway"

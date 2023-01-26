@@ -105,17 +105,12 @@ nohup supervisord
 sleep 15
 DISPLAY=:90 xdotool key alt+F11
 
+# postman
+DISPLAY=:90 /./usr/bin/Postman/Postman&
+
 # install code-server
 curl -fsSL https://code-server.dev/install.sh | sh 
 code-server --auth none --port 13337 &
-
-# use coder CLI to clone and install dotfiles
-coder dotfiles -y ${var.dotfiles_uri}
-
-# clone repo
-mkdir -p ~/.ssh
-ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
-git clone --progress git@github.com:sharkymark/java_helloworld.git
 
 EOT
 }
@@ -154,6 +149,22 @@ resource "coder_app" "eclipse" {
   }
 }
 
+resource "coder_app" "postman" {
+  agent_id     = coder_agent.coder.id
+  slug         = "eclipse"
+  display_name = "Eclipse"
+  icon         = "https://upload.wikimedia.org/wikipedia/commons/c/cf/Eclipse-SVG.svg"
+  url          = "http://localhost:6081"
+  subdomain    = false
+  share        = "owner"
+
+  healthcheck {
+    url       = "http://localhost:6081/healthz"
+    interval  = 6
+    threshold = 20
+  }
+}
+
 resource "kubernetes_pod" "main" {
   count = data.coder_workspace.me.start_count
   metadata {
@@ -167,7 +178,7 @@ resource "kubernetes_pod" "main" {
     }
     container {
       name              = "eclipse"
-      image             = "docker.io/marktmilligan/eclipse-vnc:latest"
+      image             = "docker.io/ericpaulsen/eclipse-postman-vnc:latest"
       command           = ["sh", "-c", coder_agent.coder.init_script]
       image_pull_policy = "Always"
       security_context {

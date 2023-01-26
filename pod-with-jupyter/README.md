@@ -27,7 +27,7 @@ tags: [cloud, kubernetes]
 1. Alternatively, developers can run localhost and either use `coder port-forward <workspace name> --tcp 8888:8888` or `ssh -L 8888:localhost:8888 coder.<workspace name>`
 
 ### Breaking changes
-1. This template uses functionality in the Coder provider 0.6.0 for the `coder_app` called `slug` and `display_name`
+1. This template uses functionality in the Coder provider 0.6.9 for the `coder_app` called `slug` and `display_name`
 1. Also removed the baseURL from the Jupyter startup script and the owner and workspace names from the `coder_app`
 
 ### Authentication

@@ -2,7 +2,7 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "~> 0.6.0"
+      version = "~> 0.6.9"
     }
     docker = {
       source  = "kreuzwerker/docker"
@@ -17,7 +17,7 @@ variable "dotfiles_uri" {
 
   see https://dotfiles.github.io
   EOF
-  default = "git@github.com:sharkymark/dotfiles.git"
+  default     = "git@github.com:sharkymark/dotfiles.git"
 }
 
 provider "docker" {
@@ -32,9 +32,9 @@ data "coder_workspace" "me" {
 
 
 resource "coder_agent" "coder" {
-  os   = "linux"
-  arch = "amd64"
-  dir = "/home/coder"
+  os             = "linux"
+  arch           = "amd64"
+  dir            = "/home/coder"
   startup_script = <<EOT
 #!/bin/bash
 
@@ -70,35 +70,35 @@ EOT
 
 # code-server
 resource "coder_app" "code-server" {
-  agent_id      = coder_agent.coder.id
-  slug          = "code-server"  
-  display_name  = "VS Code"
-  icon          = "/icon/code.svg"
-  url           = "http://localhost:13337?folder=/home/coder"
-  subdomain = false
-  share     = "owner"
+  agent_id     = coder_agent.coder.id
+  slug         = "code-server"
+  display_name = "VS Code"
+  icon         = "/icon/code.svg"
+  url          = "http://localhost:13337?folder=/home/coder"
+  subdomain    = false
+  share        = "owner"
 
   healthcheck {
     url       = "http://localhost:13337/healthz"
     interval  = 5
     threshold = 15
-  } 
+  }
 }
 
 resource "coder_app" "pycharm" {
-  agent_id      = coder_agent.coder.id
-  slug          = "pycharm"  
-  display_name  = "PyCharm"
-  icon          = "/icon/pycharm.svg"
-  url           = "http://localhost:9001/"
-  subdomain = false
-  share     = "owner"
+  agent_id     = coder_agent.coder.id
+  slug         = "pycharm"
+  display_name = "PyCharm"
+  icon         = "/icon/pycharm.svg"
+  url          = "http://localhost:9001/"
+  subdomain    = false
+  share        = "owner"
 
   healthcheck {
     url       = "http://localhost:9001/healthz"
     interval  = 10
     threshold = 20
-  } 
+  }
 }
 
 resource "docker_container" "workspace" {
@@ -123,12 +123,12 @@ resource "docker_container" "workspace" {
   ]
 
 
-  env        = ["CODER_AGENT_TOKEN=${coder_agent.coder.token}"]
+  env = ["CODER_AGENT_TOKEN=${coder_agent.coder.token}"]
   volumes {
     container_path = "/home/coder/"
     volume_name    = docker_volume.coder_volume.name
     read_only      = false
-  }  
+  }
   host {
     host = "host.docker.internal"
     ip   = "host-gateway"
@@ -141,9 +141,9 @@ resource "docker_volume" "coder_volume" {
 
 resource "coder_metadata" "workspace_info" {
   count       = data.coder_workspace.me.start_count
-  resource_id = docker_container.workspace[0].id   
+  resource_id = docker_container.workspace[0].id
   item {
     key   = "image"
     value = "codercom/enterprise-pycharm:ubuntu"
-  }     
+  }
 }

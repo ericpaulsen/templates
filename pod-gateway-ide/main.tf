@@ -2,12 +2,12 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "~> 0.6.0"
+      version = "~> 0.6.9"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = "~> 2.12.1"
-    }   
+    }
   }
 }
 
@@ -30,7 +30,7 @@ variable "workspaces_namespace" {
   Kubernetes namespace to deploy the workspace into
 
   EOF
-  default = ""
+  default     = ""
 }
 
 provider "kubernetes" {
@@ -46,7 +46,7 @@ variable "dotfiles_uri" {
 
   see https://dotfiles.github.io
   EOF
-  default = "git@github.com:sharkymark/dotfiles.git"
+  default     = "git@github.com:sharkymark/dotfiles.git"
 }
 
 variable "cpu" {
@@ -58,8 +58,8 @@ variable "cpu" {
       "4",
       "6"
     ], var.cpu)
-    error_message = "Invalid cpu!"   
-}
+    error_message = "Invalid cpu!"
+  }
 }
 
 variable "memory" {
@@ -71,26 +71,26 @@ variable "memory" {
       "6",
       "8"
     ], var.memory)
-    error_message = "Invalid memory!"  
-}
+    error_message = "Invalid memory!"
+  }
 }
 
 locals {
   ide-dir = {
-    "IntelliJ" = "idea" 
-    "PyCharm" = "pycharm" 
-    "GoLand" = "goland"
+    "IntelliJ" = "idea"
+    "PyCharm"  = "pycharm"
+    "GoLand"   = "goland"
   }
   repo = {
-    "IntelliJ" = "sharkymark/java_helloworld.git" 
-    "PyCharm" = "sharkymark/python-commissions.git" 
-    "GoLand" = "coder/coder.git"
-  }  
+    "IntelliJ" = "sharkymark/java_helloworld.git"
+    "PyCharm"  = "sharkymark/python-commissions.git"
+    "GoLand"   = "coder/coder.git"
+  }
   image = {
-    "IntelliJ" = "codercom/enterprise-intellij:ubuntu" 
-    "PyCharm" = "codercom/enterprise-pycharm:ubuntu" 
-    "GoLand" = "codercom/enterprise-goland:ubuntu"
-  }  
+    "IntelliJ" = "codercom/enterprise-intellij:ubuntu"
+    "PyCharm"  = "codercom/enterprise-pycharm:ubuntu"
+    "GoLand"   = "codercom/enterprise-goland:ubuntu"
+  }
 }
 
 variable "ide" {
@@ -99,11 +99,11 @@ variable "ide" {
   validation {
     condition = contains([
       "IntelliJ",
-      "PyCharm",      
+      "PyCharm",
       "GoLand"
     ], var.ide)
-    error_message = "Invalid JetBrains IDE!"   
-}
+    error_message = "Invalid JetBrains IDE!"
+  }
 }
 
 variable "disk_size" {
@@ -112,9 +112,9 @@ variable "disk_size" {
 }
 
 resource "coder_agent" "coder" {
-  os   = "linux"
-  arch = "amd64"
-  dir = "/home/coder"
+  os             = "linux"
+  arch           = "amd64"
+  dir            = "/home/coder"
   startup_script = <<EOT
 #!/bin/bash
 
@@ -139,68 +139,68 @@ cd /opt/${lookup(local.ide-dir, var.ide)}/bin
 
 # code-server
 resource "coder_app" "code-server" {
-  agent_id      = coder_agent.coder.id
-  slug          = "code-server"  
-  display_name  = "VS Code"
-  icon          = "/icon/code.svg"
-  url           = "http://localhost:13337?folder=/home/coder"
-  subdomain = false
-  share     = "owner"
+  agent_id     = coder_agent.coder.id
+  slug         = "code-server"
+  display_name = "VS Code"
+  icon         = "/icon/code.svg"
+  url          = "http://localhost:13337?folder=/home/coder"
+  subdomain    = false
+  share        = "owner"
 
   healthcheck {
     url       = "http://localhost:13337/healthz"
     interval  = 3
     threshold = 10
-  }  
+  }
 }
 
 resource "kubernetes_pod" "main" {
   count = data.coder_workspace.me.start_count
   depends_on = [
     kubernetes_persistent_volume_claim.home-directory
-  ]  
+  ]
   metadata {
-    name = "coder-${data.coder_workspace.me.owner}-${data.coder_workspace.me.name}"
+    name      = "coder-${data.coder_workspace.me.owner}-${data.coder_workspace.me.name}"
     namespace = var.workspaces_namespace
   }
   spec {
     security_context {
       run_as_user = "1000"
       fs_group    = "1000"
-    }    
+    }
     container {
-      name    = "coder-container"
-      image   = "docker.io/${lookup(local.image, var.ide)}"
+      name              = "coder-container"
+      image             = "docker.io/${lookup(local.image, var.ide)}"
       image_pull_policy = "Always"
-      command = ["sh", "-c", coder_agent.coder.init_script]
+      command           = ["sh", "-c", coder_agent.coder.init_script]
       security_context {
         run_as_user = "1000"
-      }      
+      }
       env {
         name  = "CODER_AGENT_TOKEN"
         value = coder_agent.coder.token
-      }  
+      }
       resources {
         requests = {
           cpu    = "500m"
           memory = "500Mi"
-        }        
+        }
         limits = {
           cpu    = "${var.cpu}"
           memory = "${var.memory}G"
         }
-      }                       
+      }
       volume_mount {
         mount_path = "/home/coder"
         name       = "home-directory"
-      }      
+      }
     }
     volume {
       name = "home-directory"
       persistent_volume_claim {
         claim_name = kubernetes_persistent_volume_claim.home-directory.metadata.0.name
       }
-    }        
+    }
   }
 }
 
@@ -229,7 +229,7 @@ resource "coder_metadata" "workspace_info" {
   item {
     key   = "memory"
     value = "${var.memory}GB"
-  }  
+  }
   item {
     key   = "image"
     value = "docker.io/${lookup(local.image, var.ide)}"
@@ -237,7 +237,7 @@ resource "coder_metadata" "workspace_info" {
   item {
     key   = "repo cloned"
     value = "docker.io/${lookup(local.repo, var.ide)}"
-  }  
+  }
   item {
     key   = "disk"
     value = "${var.disk_size}GiB"
@@ -245,5 +245,5 @@ resource "coder_metadata" "workspace_info" {
   item {
     key   = "volume"
     value = kubernetes_pod.main[0].spec[0].container[0].volume_mount[0].mount_path
-  }  
+  }
 }

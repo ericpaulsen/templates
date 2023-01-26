@@ -25,6 +25,23 @@ variable "use_kubeconfig" {
   EOF
 }
 
+
+variable "workspaces_namespace" {
+  description = <<-EOF
+  Kubernetes namespace to deploy the workspace into
+
+  EOF
+  default     = "oss"
+
+}
+
+provider "kubernetes" {
+  # Authenticate via ~/.kube/config or a Coder-specific ServiceAccount, depending on admin preferences
+  config_path = var.use_kubeconfig == true ? "~/.kube/config" : null
+}
+
+data "coder_workspace" "me" {}
+
 variable "dotfiles_uri" {
   description = <<-EOF
   Dotfiles repo URI (optional)
@@ -32,6 +49,42 @@ variable "dotfiles_uri" {
   see https://dotfiles.github.io
   EOF
   default     = "git@github.com:sharkymark/dotfiles.git"
+}
+
+variable "image" {
+  description = <<-EOF
+  Container images from coder-com
+
+  EOF
+  default     = "ericpaulsen/code-server:latest"
+  validation {
+    condition = contains([
+      "ericpaulsen/code-server:latest",
+      "codercom/enterprise-golang:ubuntu",
+      "codercom/enterprise-java:ubuntu",
+      "codercom/enterprise-base:ubuntu"
+    ], var.image)
+    error_message = "Invalid image!"
+  }
+}
+
+variable "repo" {
+  description = <<-EOF
+  Code repository to clone
+
+  EOF
+  default     = "sharkymark/coder-react.git"
+  validation {
+    condition = contains([
+      "sharkymark/coder-react.git",
+      "coder/coder.git",
+      "coder/code-server.git",
+      "sharkymark/commissions.git",
+      "sharkymark/java_helloworld.git",
+      "sharkymark/python-commissions.git"
+    ], var.repo)
+    error_message = "Invalid repo!"
+  }
 }
 
 variable "cpu" {
@@ -67,23 +120,6 @@ variable "disk_size" {
   default     = 10
 }
 
-
-variable "workspaces_namespace" {
-  description = <<-EOF
-  Kubernetes namespace to deploy the workspace into
-
-  EOF
-  default     = ""
-
-}
-
-provider "kubernetes" {
-  # Authenticate via ~/.kube/config or a Coder-specific ServiceAccount, depending on admin preferences
-  config_path = var.use_kubeconfig == true ? "~/.kube/config" : null
-}
-
-data "coder_workspace" "me" {}
-
 resource "coder_agent" "coder" {
   os             = "linux"
   arch           = "amd64"
@@ -91,33 +127,18 @@ resource "coder_agent" "coder" {
   startup_script = <<EOT
 #!/bin/bash
 
-# start VNC
-echo "Creating desktop..."
-mkdir -p "$XFCE_DEST_DIR"
-cp -rT "$XFCE_BASE_DIR" "$XFCE_DEST_DIR"
-# Skip default shell config prompt.
-cp /etc/zsh/newuser.zshrc.recommended $HOME/.zshrc
-echo "Initializing Supervisor..."
-nohup supervisord
-
-# eclipse
-/opt/eclipse/eclipse -data /home/coder sh &
-sleep 15
-DISPLAY=:90 xdotool key alt+F11
-
-# install code-server
-curl -fsSL https://code-server.dev/install.sh | sh 
-code-server --auth none --port 13337 &
+# clone repo
+mkdir -p ~/.ssh
+ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
+git clone --progress git@github.com:${var.repo}
 
 # use coder CLI to clone and install dotfiles
 coder dotfiles -y ${var.dotfiles_uri}
 
-# clone repo
-mkdir -p ~/.ssh
-ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
-git clone --progress git@github.com:sharkymark/java_helloworld.git
+# install and start code-server
+code-server --disable-file-downloads --auth none --port 13337 &
 
-EOT
+  EOT  
 }
 
 # code-server
@@ -126,7 +147,7 @@ resource "coder_app" "code-server" {
   slug         = "code-server"
   display_name = "VS Code"
   icon         = "/icon/code.svg"
-  url          = "http://localhost:13337"
+  url          = "http://localhost:13337?folder=/home/coder"
   subdomain    = false
   share        = "owner"
 
@@ -135,29 +156,15 @@ resource "coder_app" "code-server" {
     interval  = 3
     threshold = 10
   }
-
-}
-
-resource "coder_app" "eclipse" {
-  agent_id     = coder_agent.coder.id
-  slug         = "eclipse"
-  display_name = "Eclipse"
-  icon         = "https://upload.wikimedia.org/wikipedia/commons/c/cf/Eclipse-SVG.svg"
-  url          = "http://localhost:6081"
-  subdomain    = false
-  share        = "owner"
-
-  healthcheck {
-    url       = "http://localhost:6081/healthz"
-    interval  = 6
-    threshold = 20
-  }
 }
 
 resource "kubernetes_pod" "main" {
   count = data.coder_workspace.me.start_count
+  depends_on = [
+    kubernetes_persistent_volume_claim.home-directory
+  ]
   metadata {
-    name      = "coder-${data.coder_workspace.me.owner}-${lower(data.coder_workspace.me.name)}"
+    name      = "coder-${data.coder_workspace.me.owner}-${data.coder_workspace.me.name}"
     namespace = var.workspaces_namespace
   }
   spec {
@@ -166,21 +173,22 @@ resource "kubernetes_pod" "main" {
       fs_group    = "1000"
     }
     container {
-      name              = "eclipse"
-      image             = "docker.io/marktmilligan/eclipse-vnc:latest"
-      command           = ["sh", "-c", coder_agent.coder.init_script]
-      image_pull_policy = "Always"
+      name  = "coder-container"
+      image = "docker.io/${var.image}"
+      #image_pull_policy = "Always"
+      command = ["sh", "-c", coder_agent.coder.init_script]
       security_context {
         run_as_user = "1000"
       }
       env {
-        name  = "CODER_AGENT_TOKEN"
+        name = "CODER_AGENT_TOKEN"
+
         value = coder_agent.coder.token
       }
       resources {
         requests = {
-          cpu    = "250m"
-          memory = "250Mi"
+          cpu    = "500m"
+          memory = "500Mi"
         }
         limits = {
           cpu    = "${var.cpu}"
@@ -203,7 +211,7 @@ resource "kubernetes_pod" "main" {
 
 resource "kubernetes_persistent_volume_claim" "home-directory" {
   metadata {
-    name      = "home-coder-${data.coder_workspace.me.owner}-${lower(data.coder_workspace.me.name)}"
+    name      = "home-coder-${data.coder_workspace.me.owner}-${data.coder_workspace.me.name}"
     namespace = var.workspaces_namespace
   }
   spec {
@@ -221,7 +229,7 @@ resource "coder_metadata" "workspace_info" {
   resource_id = kubernetes_pod.main[0].id
   item {
     key   = "CPU"
-    value = "${kubernetes_pod.main[0].spec[0].container[0].resources[0].limits.cpu} cores"
+    value = "${var.cpu} cores"
   }
   item {
     key   = "memory"
@@ -229,7 +237,11 @@ resource "coder_metadata" "workspace_info" {
   }
   item {
     key   = "image"
-    value = "docker.io/marktmilligan/eclipse-vnc:latest"
+    value = "docker.io/${var.image}"
+  }
+  item {
+    key   = "repo cloned"
+    value = "docker.io/${var.repo}"
   }
   item {
     key   = "disk"

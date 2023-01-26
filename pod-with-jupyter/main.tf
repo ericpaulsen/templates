@@ -2,7 +2,7 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "~> 0.6.0"
+      version = "~> 0.6.9"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
@@ -38,11 +38,11 @@ variable "dotfiles_uri" {
 
   see https://dotfiles.github.io
   EOF
-  default = "git@github.com:sharkymark/dotfiles.git"
+  default     = "git@github.com:sharkymark/dotfiles.git"
 }
 
 locals {
-  jupyter-type-arg = "${var.jupyter == "notebook" ? "Notebook" : "Server"}"
+  jupyter-type-arg = var.jupyter == "notebook" ? "Notebook" : "Server"
 }
 
 variable "jupyter" {
@@ -53,8 +53,8 @@ variable "jupyter" {
       "notebook",
       "lab",
     ], var.jupyter)
-    error_message = "Invalid Jupyter!"   
-}
+    error_message = "Invalid Jupyter!"
+  }
 }
 
 variable "cpu" {
@@ -65,8 +65,8 @@ variable "cpu" {
       "1",
       "2",
     ], var.cpu)
-    error_message = "Invalid cpu!"   
-}
+    error_message = "Invalid cpu!"
+  }
 }
 
 variable "memory" {
@@ -78,8 +78,8 @@ variable "memory" {
       "2",
       "4"
     ], var.memory)
-    error_message = "Invalid memory!"  
-}
+    error_message = "Invalid memory!"
+  }
 }
 
 variable "disk_size" {
@@ -96,9 +96,9 @@ provider "kubernetes" {
 data "coder_workspace" "me" {}
 
 resource "coder_agent" "coder" {
-  os   = "linux"
-  arch = "amd64"
-  dir = "/home/coder"
+  os             = "linux"
+  arch           = "amd64"
+  dir            = "/home/coder"
   startup_script = <<EOT
 #!/bin/bash
 
@@ -128,52 +128,52 @@ EOT
 
 # code-server
 resource "coder_app" "code-server" {
-  agent_id      = coder_agent.coder.id
-  slug          = "code-server"  
-  display_name  = "VS Code"
-  icon          = "/icon/code.svg"
-  url           = "http://localhost:13337?folder=/home/coder"
-  share         = "owner"
-  subdomain     = false  
+  agent_id     = coder_agent.coder.id
+  slug         = "code-server"
+  display_name = "VS Code"
+  icon         = "/icon/code.svg"
+  url          = "http://localhost:13337?folder=/home/coder"
+  share        = "owner"
+  subdomain    = false
 
   healthcheck {
     url       = "http://localhost:13337/healthz"
     interval  = 3
     threshold = 10
-  }   
+  }
 }
 
 resource "coder_app" "jupyter" {
-  agent_id      = coder_agent.coder.id
-  slug          = "jupyter-${var.jupyter}"  
-  display_name  = "jupyter-${var.jupyter}"
-  icon          = "/icon/jupyter.svg"
-  url           = "http://localhost:8888/"
-  share         = "owner"
-  subdomain     = true  
+  agent_id     = coder_agent.coder.id
+  slug         = "jupyter-${var.jupyter}"
+  display_name = "jupyter-${var.jupyter}"
+  icon         = "/icon/jupyter.svg"
+  url          = "http://localhost:8888/"
+  share        = "owner"
+  subdomain    = true
 
   healthcheck {
     url       = "http://localhost:8888/healthz"
     interval  = 10
     threshold = 20
-  }  
+  }
 }
 
 resource "kubernetes_pod" "main" {
   count = data.coder_workspace.me.start_count
   metadata {
-    name = "coder-${data.coder_workspace.me.owner}-${lower(data.coder_workspace.me.name)}"
+    name      = "coder-${data.coder_workspace.me.owner}-${lower(data.coder_workspace.me.name)}"
     namespace = var.workspaces_namespace
   }
   spec {
     security_context {
       run_as_user = "1000"
       fs_group    = "1000"
-    }     
+    }
     container {
-      name    = "coder-container"
-      image   = "docker.io/codercom/enterprise-jupyter:ubuntu"
-      command = ["sh", "-c", coder_agent.coder.init_script]
+      name              = "coder-container"
+      image             = "docker.io/codercom/enterprise-jupyter:ubuntu"
+      command           = ["sh", "-c", coder_agent.coder.init_script]
       image_pull_policy = "Always"
       security_context {
         run_as_user = "1000"
@@ -186,23 +186,23 @@ resource "kubernetes_pod" "main" {
         requests = {
           cpu    = "250m"
           memory = "250Mi"
-        }        
+        }
         limits = {
           cpu    = "${var.cpu}"
           memory = "${var.memory}G"
         }
-      }                       
+      }
       volume_mount {
         mount_path = "/home/coder"
         name       = "home-directory"
-      }        
+      }
     }
     volume {
       name = "home-directory"
       persistent_volume_claim {
         claim_name = kubernetes_persistent_volume_claim.home-directory.metadata.0.name
       }
-    }         
+    }
   }
 }
 
@@ -231,11 +231,11 @@ resource "coder_metadata" "workspace_info" {
   item {
     key   = "memory"
     value = "${var.memory}GB"
-  }  
+  }
   item {
     key   = "disk"
     value = "${var.disk_size}GiB"
-  }  
+  }
   item {
     key   = "image"
     value = "codercom/enterprise-jupyter:ubuntu"
@@ -243,15 +243,15 @@ resource "coder_metadata" "workspace_info" {
   item {
     key   = "repo cloned"
     value = "docker.io/sharkymark/pandas_automl.git"
-  }  
+  }
   item {
     key   = "jupyter"
-    value = "${var.jupyter}"
+    value = var.jupyter
   }
   item {
     key   = "volume"
     value = kubernetes_pod.main[0].spec[0].container[0].volume_mount[0].mount_path
-  }  
+  }
 }
 
 

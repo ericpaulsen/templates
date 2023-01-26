@@ -2,7 +2,7 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "~> 0.6.0"
+      version = "~> 0.6.9"
     }
     docker = {
       source  = "kreuzwerker/docker"
@@ -27,11 +27,11 @@ variable "dotfiles_uri" {
 
   see https://dotfiles.github.io
   EOF
-  default = "git@github.com:sharkymark/dotfiles.git"
+  default     = "git@github.com:sharkymark/dotfiles.git"
 }
 
 locals {
-  jupyter-type-arg = "${var.jupyter == "notebook" ? "Notebook" : "Server"}"
+  jupyter-type-arg = var.jupyter == "notebook" ? "Notebook" : "Server"
 }
 
 variable "jupyter" {
@@ -42,14 +42,14 @@ variable "jupyter" {
       "notebook",
       "lab",
     ], var.jupyter)
-    error_message = "Invalid Jupyter!"   
-}
+    error_message = "Invalid Jupyter!"
+  }
 }
 
 resource "coder_agent" "dev" {
   arch           = "amd64"
   os             = "linux"
-  startup_script  = <<EOT
+  startup_script = <<EOT
 #!/bin/bash
 
 # start jupyter 
@@ -78,35 +78,35 @@ SERVICE_URL=https://open-vsx.org/vscode/gallery ITEM_URL=https://open-vsx.org/vs
 
 # code-server
 resource "coder_app" "code-server" {
-  agent_id      = coder_agent.dev.id
-  slug          = "code-server"  
-  display_name  = "VS Code"
-  icon          = "/icon/code.svg"
-  url           = "http://localhost:13337?folder=/home/coder"
-  share         = "owner"
-  subdomain     = false  
+  agent_id     = coder_agent.dev.id
+  slug         = "code-server"
+  display_name = "VS Code"
+  icon         = "/icon/code.svg"
+  url          = "http://localhost:13337?folder=/home/coder"
+  share        = "owner"
+  subdomain    = false
 
   healthcheck {
     url       = "http://localhost:13337/healthz"
     interval  = 5
     threshold = 6
-  }   
+  }
 }
 
 resource "coder_app" "jupyter" {
-  agent_id      = coder_agent.dev.id
-  slug          = "jupyter-${var.jupyter}"  
-  display_name  = "jupyter-${var.jupyter}"
-  icon          = "/icon/jupyter.svg"
-  url           = "http://localhost:8888/"
-  share         = "owner"
-  subdomain     = true  
+  agent_id     = coder_agent.dev.id
+  slug         = "jupyter-${var.jupyter}"
+  display_name = "jupyter-${var.jupyter}"
+  icon         = "/icon/jupyter.svg"
+  url          = "http://localhost:8888/"
+  share        = "owner"
+  subdomain    = true
 
   healthcheck {
     url       = "http://localhost:8888/healthz"
     interval  = 10
     threshold = 20
-  }  
+  }
 }
 
 resource "docker_container" "workspace" {
@@ -127,12 +127,12 @@ resource "docker_container" "workspace" {
     EOT
   ]
 
-  env        = ["CODER_AGENT_TOKEN=${coder_agent.dev.token}"]
+  env = ["CODER_AGENT_TOKEN=${coder_agent.dev.token}"]
   volumes {
     container_path = "/home/coder/"
     volume_name    = docker_volume.coder_volume.name
     read_only      = false
-  }  
+  }
   host {
     host = "host.docker.internal"
     ip   = "host-gateway"
@@ -146,7 +146,7 @@ resource "docker_volume" "coder_volume" {
 
 resource "coder_metadata" "workspace_info" {
   count       = data.coder_workspace.me.start_count
-  resource_id = docker_container.workspace[0].id   
+  resource_id = docker_container.workspace[0].id
   item {
     key   = "image"
     value = "codercom/enterprise-jupyter:ubuntu"
@@ -154,9 +154,9 @@ resource "coder_metadata" "workspace_info" {
   item {
     key   = "repo cloned"
     value = "docker.io/sharkymark/pandas_automl.git"
-  }  
+  }
   item {
     key   = "jupyter"
-    value = "${var.jupyter}"
-  }    
+    value = var.jupyter
+  }
 }

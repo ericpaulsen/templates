@@ -2,7 +2,7 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "0.6.0"
+      version = "0.6.9"
     }
     azurerm = {
       source  = "hashicorp/azurerm"
@@ -83,7 +83,7 @@ variable "dotfiles_uri" {
 
   see https://dotfiles.github.io
   EOF
-  default = "git@github.com:sharkymark/dotfiles.git"
+  default     = "git@github.com:sharkymark/dotfiles.git"
 }
 
 
@@ -110,19 +110,19 @@ resource "coder_agent" "main" {
 }
 
 resource "coder_app" "code-server" {
-  agent_id = coder_agent.main.id
-  slug          = "code-server"  
-  display_name  = "VS Code"
-  url      = "http://localhost:13337/?folder=/home/${lower(substr(data.coder_workspace.me.owner, 0, 32))}"
-  icon     = "/icon/code.svg"
-  subdomain = false
-  share     = "owner"
+  agent_id     = coder_agent.main.id
+  slug         = "code-server"
+  display_name = "VS Code"
+  url          = "http://localhost:13337/?folder=/home/${lower(substr(data.coder_workspace.me.owner, 0, 32))}"
+  icon         = "/icon/code.svg"
+  subdomain    = false
+  share        = "owner"
 
   healthcheck {
     url       = "http://localhost:13337/healthz"
     interval  = 6
     threshold = 20
-  } 
+  }
 }
 
 
@@ -130,10 +130,10 @@ locals {
   prefix = "coder-${data.coder_workspace.me.owner}-${data.coder_workspace.me.name}"
 
   userdata = templatefile("cloud-config.yaml.tftpl", {
-    username          = lower(substr(data.coder_workspace.me.owner, 0, 32))
-#    username          = "ubuntu"   
-    init_script       = base64encode(coder_agent.main.init_script)
-    hostname          = lower(data.coder_workspace.me.name)
+    username = lower(substr(data.coder_workspace.me.owner, 0, 32))
+    #    username          = "ubuntu"   
+    init_script = base64encode(coder_agent.main.init_script)
+    hostname    = lower(data.coder_workspace.me.name)
   })
 }
 
@@ -255,7 +255,7 @@ resource "azurerm_virtual_machine_data_disk_attachment" "home" {
 resource "coder_metadata" "workspace_info" {
   count       = data.coder_workspace.me.start_count
   resource_id = azurerm_linux_virtual_machine.main[0].id
-  icon = "/icon/memory.svg"
+  icon        = "/icon/memory.svg"
   item {
     key   = "instance type"
     value = azurerm_linux_virtual_machine.main[0].size
@@ -263,20 +263,20 @@ resource "coder_metadata" "workspace_info" {
   item {
     key   = "location"
     value = var.location
-  }  
+  }
   item {
     key   = "image"
     value = azurerm_linux_virtual_machine.main[0].source_image_reference[0].offer
-  }  
+  }
   item {
     key   = "ip address"
     value = azurerm_public_ip.main.ip_address
-  }    
+  }
 }
 
 resource "coder_metadata" "home_info" {
   resource_id = azurerm_managed_disk.home.id
-  icon = "/icon/database.svg"
+  icon        = "/icon/database.svg"
   item {
     key   = "size"
     value = "${var.home_size} GiB"
@@ -286,72 +286,72 @@ resource "coder_metadata" "home_info" {
 
 
 resource "coder_metadata" "hide_azurerm_resource_group" {
-  count = data.coder_workspace.me.start_count
+  count       = data.coder_workspace.me.start_count
   resource_id = azurerm_resource_group.main.id
-  hide = true
+  hide        = true
   item {
-    key = "name"
+    key   = "name"
     value = azurerm_resource_group.main.name
-  }  
+  }
 }
 
 
 resource "coder_metadata" "hide_azurerm_public_ip" {
-  count = data.coder_workspace.me.start_count
+  count       = data.coder_workspace.me.start_count
   resource_id = azurerm_public_ip.main.id
-  hide = true
+  hide        = true
   item {
-    key = "name"
+    key   = "name"
     value = azurerm_public_ip.main.name
-  }  
+  }
 }
 
 resource "coder_metadata" "hide_azurerm_virtual_network" {
-  count = data.coder_workspace.me.start_count
+  count       = data.coder_workspace.me.start_count
   resource_id = azurerm_virtual_network.main.id
-  hide = true
+  hide        = true
   item {
-    key = "name"
+    key   = "name"
     value = azurerm_virtual_network.main.name
-  }  
+  }
 }
 
 resource "coder_metadata" "hide_azurerm_subnet" {
-  count = data.coder_workspace.me.start_count
+  count       = data.coder_workspace.me.start_count
   resource_id = azurerm_subnet.internal.id
-  hide = true
+  hide        = true
   item {
-    key = "name"
+    key   = "name"
     value = azurerm_subnet.internal.name
-  }  
+  }
 }
 
 resource "coder_metadata" "hide_azurerm_network_interface" {
-  count = data.coder_workspace.me.start_count
+  count       = data.coder_workspace.me.start_count
   resource_id = azurerm_network_interface.main.id
-  hide = true
+  hide        = true
   item {
-    key = "name"
+    key   = "name"
     value = azurerm_network_interface.main.name
-  }  
+  }
 }
 
 resource "coder_metadata" "hide_tls_private_key" {
-  count = data.coder_workspace.me.start_count
+  count       = data.coder_workspace.me.start_count
   resource_id = tls_private_key.dummy.id
-  hide = true
+  hide        = true
   item {
-    key = "name"
+    key   = "name"
     value = tls_private_key.dummy.algorithm
-  }  
+  }
 }
 
 resource "coder_metadata" "hide_azurerm_virtual_machine_data_disk_attachment" {
-  count = data.coder_workspace.me.start_count
+  count       = data.coder_workspace.me.start_count
   resource_id = azurerm_virtual_machine_data_disk_attachment.home[0].id
-  hide = true
+  hide        = true
   item {
-    key = "name"
+    key   = "name"
     value = azurerm_virtual_machine_data_disk_attachment.home[0].managed_disk_id
-  }  
+  }
 }

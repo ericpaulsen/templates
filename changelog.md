@@ -25,17 +25,17 @@
 1. added a docker-in-docker template if sysbox is added to your docker host. When I get sysbox in K8s working, I'll post a template.
 
 11-13-22 mark@coder.com
-1. updated all templates to latest coder terraform provider 0.6.0
+1. updated all templates to latest coder terraform provider 0.6.9
 
 11-6-22 mark@coder.com
 1. added an FAQ page
-2. updated projector pod templates to coder provider 0.6.0
+2. updated projector pod templates to coder provider 0.6.9
 
 11-5-22 mark@coder.com
 1. added an API examples page to `curl`
 
 11-4-22 mark@coder.com
-1. updated jupyter pod and docker templates to work with coder terraform provider 0.6.0 - missing `slug` in `coder_app` was preventing it from working. Also removed several input parameters.
+1. updated jupyter pod and docker templates to work with coder terraform provider 0.6.9 - missing `slug` in `coder_app` was preventing it from working. Also removed several input parameters.
 
 11-3-22 mark@coder.com
 1. created a docker and pod template showcasing dashboard port forwarding with `coder_app` -[docs](https://github.com/coder/coder/blob/main/docs/networking/port-forwarding.md)
