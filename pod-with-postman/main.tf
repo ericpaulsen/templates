@@ -1,12 +1,10 @@
 terraform {
   required_providers {
     coder = {
-      source  = "coder/coder"
-      version = "~> 0.6.9"
+      source = "coder/coder"
     }
     kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 2.12.1"
+      source = "hashicorp/kubernetes"
     }
   }
 }
@@ -16,10 +14,8 @@ variable "use_kubeconfig" {
   sensitive   = true
   description = <<-EOF
   Use host kubeconfig? (true/false)
-
   Set this to false if the Coder host is itself running as a Pod on the same
   Kubernetes cluster as you are deploying workspaces to.
-
   Set this to true if the Coder host is running outside the Kubernetes cluster
   for workspaces.  A valid "~/.kube/config" must be present on the Coder host.
   EOF
@@ -28,7 +24,6 @@ variable "use_kubeconfig" {
 variable "dotfiles_uri" {
   description = <<-EOF
   Dotfiles repo URI (optional)
-
   see https://dotfiles.github.io
   EOF
   default     = "git@github.com:sharkymark/dotfiles.git"
@@ -71,7 +66,6 @@ variable "disk_size" {
 variable "workspaces_namespace" {
   description = <<-EOF
   Kubernetes namespace to deploy the workspace into
-
   EOF
   default     = ""
 
@@ -90,7 +84,6 @@ resource "coder_agent" "coder" {
   dir            = "/home/coder"
   startup_script = <<EOT
 #!/bin/bash
-
 # start VNC
 echo "Creating desktop..."
 mkdir -p "$XFCE_DEST_DIR"
@@ -99,19 +92,13 @@ cp -rT "$XFCE_BASE_DIR" "$XFCE_DEST_DIR"
 cp /etc/zsh/newuser.zshrc.recommended $HOME/.zshrc
 echo "Initializing Supervisor..."
 nohup supervisord
-
 # eclipse
-/opt/eclipse/eclipse -data /home/coder sh &
-sleep 15
-DISPLAY=:90 xdotool key alt+F11
-
+DISPLAY=:90 /opt/eclipse/eclipse -data /home/coder sh &
 # postman
 DISPLAY=:90 /./usr/bin/Postman/Postman&
-
 # install code-server
 curl -fsSL https://code-server.dev/install.sh | sh 
 code-server --auth none --port 13337 &
-
 EOT
 }
 
@@ -151,9 +138,9 @@ resource "coder_app" "eclipse" {
 
 resource "coder_app" "postman" {
   agent_id     = coder_agent.coder.id
-  slug         = "eclipse"
-  display_name = "Eclipse"
-  icon         = "https://upload.wikimedia.org/wikipedia/commons/c/cf/Eclipse-SVG.svg"
+  slug         = "postman"
+  display_name = "Postman"
+  icon         = "https://user-images.githubusercontent.com/7853266/44114706-9c72dd08-9fd1-11e8-8d9d-6d9d651c75ad.png"
   url          = "http://localhost:6081"
   subdomain    = false
   share        = "owner"
