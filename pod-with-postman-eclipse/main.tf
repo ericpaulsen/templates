@@ -137,6 +137,18 @@ nohup supervisord
 DISPLAY=:90 /opt/eclipse/eclipse -data /home/coder sh &
 # postman
 DISPLAY=:90 /./usr/bin/Postman/Postman&
+
+# start pgadmin 4
+sudo -E /usr/pgadmin4/bin/setup-web.sh --yes
+
+sudo service apache2 status | grep 'apache2 is running'
+if [ $? -eq 'apache2 is running' ]; then
+ echo "apache2 is already running or this is a CVM"
+else
+ echo "starting apache2"
+ sudo service apache2 start
+fi
+
 EOT
 }
 
@@ -219,7 +231,7 @@ resource "kubernetes_pod" "main" {
     }
     container {
       name              = "eclipse"
-      image             = "docker.io/ericpaulsen/eclipse-postman-vnc:v1"
+      image             = "docker.io/ericpaulsen/eclipse-postman-vnc:v2"
       command           = ["sh", "-c", coder_agent.coder.init_script]
       image_pull_policy = "Always"
       security_context {
@@ -281,7 +293,7 @@ resource "coder_metadata" "workspace_info" {
   }
   item {
     key   = "image"
-    value = "docker.io/ericpaulsen/eclipse-postman-vnc:v1"
+    value = "docker.io/ericpaulsen/eclipse-postman-vnc:v2"
   }
   item {
     key   = "disk"
