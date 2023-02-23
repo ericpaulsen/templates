@@ -70,6 +70,17 @@ resource "coder_agent" "coder" {
   dir  = "/home/coder"
 }
 
+resource "kubernetes_secret" "init_script" {
+  metadata {
+    name      = "coder-init-script"
+    namespace = "oss"
+  }
+  type = "Opaque"
+  data = {
+    "init.ps1" = base64encode(coder_agent.coder.init_script)
+  }
+}
+
 resource "kubernetes_pod" "main" {
   count = data.coder_workspace.me.start_count
   depends_on = [
@@ -97,9 +108,9 @@ resource "kubernetes_pod" "main" {
     }
     container {
       name              = "coder-container"
-      image             = "docker.io/mcr.microsoft.com/windows:ltsc2022-amd64"
+      image             = "docker.io/stefanscherer/node-windows:latest"
       image_pull_policy = "Always"
-      command           = ["powershell.exe", coder_agent.coder.init_script]
+      command           = ["powershell.exe", "-NoExit", "-Command", "C:\\coder_init\\init.ps1"]
       env {
         name  = "CODER_AGENT_TOKEN"
         value = coder_agent.coder.token
@@ -118,11 +129,21 @@ resource "kubernetes_pod" "main" {
         mount_path = "/home/coder"
         name       = "home-directory"
       }
+      volume_mount {
+        mount_path = "C:\\coder_init"
+        name       = "coder-init-script"
+      }
     }
     volume {
       name = "home-directory"
       persistent_volume_claim {
         claim_name = kubernetes_persistent_volume_claim.home-directory.metadata.0.name
+      }
+    }
+    volume {
+      name = "coder-init-script"
+      secret {
+        secret_name = "coder-init-script"
       }
     }
   }
