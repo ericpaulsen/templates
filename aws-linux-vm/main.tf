@@ -53,7 +53,9 @@ variable "instance_type" {
 }
 
 provider "aws" {
-  region = var.region
+  region                   = var.region
+  shared_config_files      = "/home/coder/.aws/config"
+  shared_credentials_files = "/home/coder/.aws/credentials"
 }
 
 data "coder_workspace" "me" {
@@ -78,7 +80,7 @@ variable "dotfiles_uri" {
 
   see https://dotfiles.github.io
   EOF
-  default = ""
+  default     = ""
 }
 
 resource "coder_agent" "main" {
@@ -198,7 +200,7 @@ resource "coder_metadata" "workspace_info" {
   item {
     key   = "vm image"
     value = data.aws_ami.ubuntu.name
-  }  
+  }
   item {
     key   = "disk"
     value = "${aws_instance.dev.root_block_device[0].volume_size} GiB"
