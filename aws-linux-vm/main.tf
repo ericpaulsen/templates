@@ -2,7 +2,11 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "0.5.2"
+      version = "0.6.10"
+    }
+    aws = {
+      source  = "hashicorp/aws"
+      version = "4.62.0"
     }
   }
 }
@@ -98,15 +102,31 @@ resource "coder_agent" "main" {
   # use coder CLI to clone and install dotfiles
   coder dotfiles -y ${var.dotfiles_uri}
 
+  # install java
+  sudo apt update
+  sudo apt install -y openjdk-11-jdk
+
+  # install gradle
+  sudo apt install -y gradle
+
+  # install tomcat
+  sudo useradd -m -d /opt/tomcat -U -s /bin/false tomcat
+  sudo apt update
+  wget https://downloads.apache.org/tomcat/tomcat-10/v10.1.6/bin/apache-tomcat-10.1.6.tar.gz
+  sudo tar -xf apache-tomcat-10.1.6.tar.gz -C /opt/tomcat/
+  sudo chown -R tomcat: /opt/tomcat
+  sudo sh -c 'chmod +x /opt/tomcat/apache-tomcat-10.1.6/bin/*.sh'
+
     EOT 
 
 }
 
 resource "coder_app" "code-server" {
-  agent_id = coder_agent.main.id
-  name     = "VS Code"
-  url      = "http://localhost:13337/?folder=/home/${lower(data.coder_workspace.me.owner)}"
-  icon     = "/icon/code.svg"
+  agent_id     = coder_agent.main.id
+  slug         = "code-server"
+  display_name = "VS Code"
+  url          = "http://localhost:13337/?folder=/home/${lower(data.coder_workspace.me.owner)}"
+  icon         = "/icon/code.svg"
 }
 
 locals {
