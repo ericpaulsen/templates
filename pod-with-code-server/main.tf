@@ -2,7 +2,7 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "0.6.12"
+      version = "0.7.0"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
@@ -15,24 +15,7 @@ provider "coder" {
   feature_use_managed_variables = true
 }
 
-variable "use_kubeconfig" {
-  type        = bool
-  sensitive   = true
-  default     = true
-  description = <<-EOF
-  Use host kubeconfig? (true/false)
-
-  Set this to false if the Coder host is itself running as a Pod on the same
-  Kubernetes cluster as you are deploying workspaces to.
-
-  Set this to true if the Coder host is running outside the Kubernetes cluster
-  for workspaces.  A valid "~/.kube/config" must be present on the Coder host.
-  EOF
-}
-
 provider "kubernetes" {
-  # Authenticate via ~/.kube/config or a Coder-specific ServiceAccount, depending on admin preferences
-  config_path = var.use_kubeconfig == true ? "~/.kube/config" : null
 }
 
 data "coder_workspace" "me" {}
@@ -165,9 +148,37 @@ git clone --progress git@github.com:${data.coder_parameter.repo.value}
 
 # install and start code-server
 curl -fsSL https://code-server.dev/install.sh | sh
-code-server --auth none --port 13337 &
+code-server --auth none --port 13337
 
-  EOT  
+  EOT
+
+  metadata {
+    display_name = "CPU Usage"
+    key          = "cpu"
+    # calculates CPU usage by summing the "us", "sy" and "id" columns of
+    # vmstat.
+    script   = <<EOT
+        top -bn1 | awk 'FNR==3 {printf "%2.0f%%", $2+$3+$4}'
+    EOT
+    interval = 1
+    timeout  = 1
+  }
+  metadata {
+    display_name = "Memory Usage"
+    key          = "mem"
+    script       = <<EOT
+    free | awk '/^Mem/ { printf("%.0f%%", $4/$2 * 100.0) }'
+    EOT
+    interval     = 1
+    timeout      = 1
+  }
+  metadata {
+    display_name = "Disk Usage"
+    key          = "disk"
+    script       = "df -h | awk '$6 ~ /^\\/$/ { print $5 }'"
+    interval     = 1
+    timeout      = 1
+  }
 }
 
 # code-server

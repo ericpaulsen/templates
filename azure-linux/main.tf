@@ -2,90 +2,118 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "0.6.9"
+      version = "0.7.0"
     }
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "=3.28.0"
+      version = "=3.52.0"
     }
   }
 }
 
-variable "location" {
-  description = "What location should your workspace live in?"
-  default     = "eastus"
-  validation {
-    condition = contains([
-      "eastus",
-      "centralus",
-      "southcentralus",
-      "westus2",
-      "australiaeast",
-      "southeastasia",
-      "northeurope",
-      "westeurope",
-      "centralindia",
-      "eastasia",
-      "japaneast",
-      "brazilsouth",
-      "asia",
-      "asiapacific",
-      "australia",
-      "brazil",
-      "india",
-      "japan",
-      "southafrica",
-      "switzerland",
-      "uae",
-    ], var.location)
-    error_message = "Invalid location!"
-  }
+variable "client_id" {
+  sensitive = true
 }
-
-variable "instance_type" {
-  description = "What instance type should your workspace use?"
-  default     = "Standard_B4ms"
-  validation {
-    condition = contains([
-      "Standard_B1ms",
-      "Standard_B2ms",
-      "Standard_B4ms",
-      "Standard_B8ms",
-      "Standard_B12ms",
-      "Standard_B16ms",
-      "Standard_D2as_v5",
-      "Standard_D4as_v5",
-      "Standard_D8as_v5",
-      "Standard_D16as_v5",
-      "Standard_D32as_v5",
-    ], var.instance_type)
-    error_message = "Invalid instance type!"
-  }
+variable "tenant_id" {
+  sensitive = true
 }
-
-variable "home_size" {
-  type        = number
-  description = "How large would you like your home volume to be (in GB)?"
-  default     = 20
-  validation {
-    condition     = var.home_size >= 1
-    error_message = "Value must be greater than or equal to 1."
-  }
+variable "subscription_id" {
+  sensitive = true
+}
+variable "client_cert_path" {
+  sensitive = true
+}
+variable "client_cert_password" {
+  sensitive = true
 }
 
 provider "azurerm" {
   features {}
+
+  client_id                   = var.client_id
+  client_certificate_path     = var.client_cert_path
+  client_certificate_password = var.client_cert_password
+  tenant_id                   = var.tenant_id
+  subscription_id             = var.subscription_id
 }
 
-variable "dotfiles_uri" {
-  description = <<-EOF
-  Dotfiles repo URI (optional)
-
-  see https://dotfiles.github.io
-  EOF
-  default     = "git@github.com:sharkymark/dotfiles.git"
+provider "coder" {
 }
 
+data "coder_parameter" "location" {
+  description  = "What location should your workspace live in?"
+  display_name = "Location"
+  name         = "location"
+  default      = "eastus"
+  mutable      = false
+  option {
+    value = "eastus"
+    name  = "East US"
+  }
+  option {
+    value = "centralus"
+    name  = "Central US"
+  }
+  option {
+    value = "southcentralus"
+    name  = "South Central US"
+  }
+  option {
+    value = "westus2"
+    name  = "West US 2"
+  }
+}
+
+data "coder_parameter" "instance_type" {
+  description  = "What instance type should your workspace use?"
+  display_name = "Instance Type"
+  name         = "instance_type"
+  mutable      = false
+  default      = "Standard_B1ms"
+  option {
+    value = "Standard_B1ms"
+    name  = "B1ms"
+  }
+  option {
+    value = "Standard_B2ms"
+    name  = "B2ms"
+  }
+  option {
+    value = "Standard_B4ms"
+    name  = "B4ms"
+  }
+  option {
+    value = "Standard_B8ms"
+    name  = "B8ms"
+  }
+}
+
+data "coder_parameter" "home_size" {
+  description  = "How large would you like your home volume to be (in GB)?"
+  display_name = "Home Volume Size"
+  name         = "home_szie"
+  default      = 20
+  option {
+    value = 20
+    name  = "20 GB"
+  }
+  option {
+    value = 40
+    name  = "40 GB"
+  }
+  option {
+    value = 60
+    name  = "60 GB"
+  }
+  option {
+    value = 80
+    name  = "80 GB"
+  }
+  option {
+    value = 100
+    name  = "100 GB"
+  }
+}
 
 data "coder_workspace" "me" {
 }
@@ -100,12 +128,9 @@ resource "coder_agent" "main" {
 
   # install code-server
   curl -fsSL https://code-server.dev/install.sh | sh
-  code-server --auth none --port 13337 &
+  code-server --auth none --port 13337
 
-  # use coder CLI to clone and install dotfiles
-  coder dotfiles -y ${var.dotfiles_uri}
-
-    EOT 
+  EOT 
 
 }
 
@@ -139,7 +164,7 @@ locals {
 
 resource "azurerm_resource_group" "main" {
   name     = "${local.prefix}-resources"
-  location = var.location
+  location = data.coder_parameter.location.value
 
   tags = {
     Coder_Provisioned = "true"
@@ -200,7 +225,7 @@ resource "azurerm_managed_disk" "home" {
   name                 = "home"
   resource_group_name  = azurerm_resource_group.main.name
   storage_account_type = "StandardSSD_LRS"
-  disk_size_gb         = var.home_size
+  disk_size_gb         = tonumber(data.coder_parameter.home_size.value)
 }
 
 // azurerm requires an SSH key (or password) for an admin user or it won't start a VM.  However,
@@ -215,7 +240,7 @@ resource "azurerm_linux_virtual_machine" "main" {
   name                = "coder-${lower(data.coder_workspace.me.owner)}-${lower(data.coder_workspace.me.name)}"
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
-  size                = var.instance_type
+  size                = data.coder_parameter.instance_type.value
   // cloud-init overwrites this, so the value here doesn't matter
   admin_username = "adminuser"
   admin_ssh_key {
@@ -262,7 +287,7 @@ resource "coder_metadata" "workspace_info" {
   }
   item {
     key   = "location"
-    value = var.location
+    value = data.coder_parameter.location.value
   }
   item {
     key   = "image"
@@ -279,9 +304,8 @@ resource "coder_metadata" "home_info" {
   icon        = "/icon/database.svg"
   item {
     key   = "size"
-    value = "${var.home_size} GiB"
+    value = "${data.coder_parameter.home_size.value} GiB"
   }
-
 }
 
 
