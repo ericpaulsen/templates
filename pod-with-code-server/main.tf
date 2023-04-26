@@ -16,9 +16,14 @@ provider "coder" {
 }
 
 provider "kubernetes" {
+  config_path = "~/.kube/config"
 }
 
 data "coder_workspace" "me" {}
+
+data "coder_git_auth" "gitlab" {
+  id = "test"
+}
 
 data "coder_parameter" "namespace" {
   name    = "namespace"
@@ -50,25 +55,10 @@ data "coder_parameter" "image" {
 }
 
 data "coder_parameter" "repo" {
-  name = "repo"
-  type = "string"
-  icon = "https://git-scm.com/images/logos/downloads/Git-Icon-1788C.png"
-  option {
-    value = "sharkymark/coder-react.git"
-    name  = "coder-react"
-  }
-  option {
-    value = "coder/coder.git"
-    name  = "coder"
-  }
-  option {
-    value = "coder/code-server.git"
-    name  = "code-server"
-  }
-  option {
-    value = "sharkymark/commissions.git"
-    name  = "commissions"
-  }
+  name    = "repo"
+  type    = "string"
+  default = "eric/react-demo.git"
+  icon    = "https://git-scm.com/images/logos/downloads/Git-Icon-1788C.png"
 }
 
 data "coder_parameter" "cpu" {
@@ -142,9 +132,7 @@ resource "coder_agent" "coder" {
 #!/bin/bash
 
 # clone repo
-mkdir -p ~/.ssh
-ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
-git clone --progress git@github.com:${data.coder_parameter.repo.value}
+git clone --progress https://owo.codes/${data.coder_parameter.repo.value}
 
 # install and start code-server
 curl -fsSL https://code-server.dev/install.sh | sh
@@ -152,6 +140,17 @@ code-server --auth none --port 13337
 
   EOT
 
+  metadata {
+    display_name = "OS"
+    key          = "os"
+    # calculates CPU usage by summing the "us", "sy" and "id" columns of
+    # vmstat.
+    script   = <<EOT
+        top -bn1 | awk 'FNR==3 {printf "%2.0f%%", $2+$3+$4}'
+    EOT
+    interval = 1
+    timeout  = 1
+  }
   metadata {
     display_name = "CPU Usage"
     key          = "cpu"
@@ -223,6 +222,10 @@ resource "kubernetes_pod" "main" {
       env {
         name  = "CODER_AGENT_TOKEN"
         value = coder_agent.coder.token
+      }
+      env {
+        name  = "CODER_USER_EMAIL"
+        value = data.coder_workspace.me.owner_email
       }
       resources {
         requests = {

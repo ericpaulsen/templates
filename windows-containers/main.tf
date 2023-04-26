@@ -108,9 +108,9 @@ resource "kubernetes_pod" "main" {
     }
     container {
       name              = "coder-container"
-      image             = "docker.io/stefanscherer/node-windows:latest"
+      image             = "ericpaulsen/node-windows:v1"
       image_pull_policy = "Always"
-      command           = ["powershell.exe", "-NoExit", "-Command", "C:\\coder_init\\init.ps1"]
+      command           = ["C:\\coder_init\\init.ps1"]
       env {
         name  = "CODER_AGENT_TOKEN"
         value = coder_agent.coder.token
