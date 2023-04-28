@@ -28,12 +28,12 @@ data "coder_git_auth" "gitlab" {
 data "coder_parameter" "namespace" {
   name    = "namespace"
   type    = "string"
-  default = "oss"
+  default = "eric-oss"
   icon    = "${data.coder_workspace.me.access_url}/icon/k8s.png"
 }
 
 data "coder_parameter" "image" {
-  name = "workspaces_image"
+  name = "image"
   type = "string"
   icon = "${data.coder_workspace.me.access_url}/icon/docker.png"
   option {
@@ -140,17 +140,6 @@ code-server --auth none --port 13337
 
   EOT
 
-  metadata {
-    display_name = "OS"
-    key          = "os"
-    # calculates CPU usage by summing the "us", "sy" and "id" columns of
-    # vmstat.
-    script   = <<EOT
-        top -bn1 | awk 'FNR==3 {printf "%2.0f%%", $2+$3+$4}'
-    EOT
-    interval = 1
-    timeout  = 1
-  }
   metadata {
     display_name = "CPU Usage"
     key          = "cpu"
