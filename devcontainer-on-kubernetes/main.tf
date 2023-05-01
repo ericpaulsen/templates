@@ -17,9 +17,41 @@ provider "kubernetes" {
   config_path = "~/.kube/config"
 }
 
-resource "coder_agent" "main" {
-  os   = "linux"
-  arch = "amd64"
+resource "coder_agent" "coder" {
+  os             = "linux"
+  arch           = "amd64"
+  startup_script = <<EOT
+#!/bin/bash
+
+# install and start code-server
+curl -fsSL https://code-server.dev/install.sh | sh
+code-server --auth none --port 13337 >/dev/null 2>&1 &
+
+  EOT
+}
+
+# code-server
+resource "coder_app" "code-server" {
+  agent_id     = coder_agent.coder.id
+  slug         = "code-server"
+  display_name = "VS Code Browser"
+  icon         = "/icon/code.svg"
+  url          = "http://localhost:13337?folder=/home/coder"
+  subdomain    = false
+  share        = "owner"
+
+  healthcheck {
+    url       = "http://localhost:13337/healthz"
+    interval  = 3
+    threshold = 10
+  }
+}
+
+data "coder_parameter" "devcontainer" {
+  name    = "Devcontainer repo"
+  type    = "string"
+  mutable = true
+  icon    = "https://git-scm.com/images/logos/downloads/Git-Icon-1788C.png"
 }
 
 resource "kubernetes_persistent_volume_claim" "workspaces" {
@@ -53,7 +85,7 @@ resource "kubernetes_pod" "main" {
       }
       env {
         name  = "CODER_AGENT_TOKEN"
-        value = coder_agent.main.token
+        value = coder_agent.coder.token
       }
       env {
         name  = "CODER_AGENT_URL"
@@ -61,7 +93,7 @@ resource "kubernetes_pod" "main" {
       }
       env {
         name  = "GIT_URL"
-        value = "https://github.com/microsoft/vscode-course-sample"
+        value = data.coder_parameter.devcontainer.value
       }
       env {
         name  = "INSECURE"
@@ -69,7 +101,7 @@ resource "kubernetes_pod" "main" {
       }
       env {
         name  = "INIT_SCRIPT"
-        value = coder_agent.main.init_script
+        value = coder_agent.coder.init_script
       }
       volume_mount {
         mount_path = "/workspaces"

@@ -15,10 +15,36 @@ data "coder_workspace" "me" {}
 
 provider "docker" {}
 
-resource "coder_agent" "main" {
+resource "coder_agent" "coder" {
   os   = "linux"
   arch = "amd64"
   dir  = "/workspaces/vscode"
+
+  startup_script = <<EOT
+#!/bin/bash
+
+# install and start code-server
+curl -fsSL https://code-server.dev/install.sh | sh
+code-server --auth none --port 13337 >/dev/null 2>&1 &
+
+  EOT
+}
+
+# code-server
+resource "coder_app" "code-server" {
+  agent_id     = coder_agent.coder.id
+  slug         = "code-server"
+  display_name = "VS Code Browser"
+  icon         = "/icon/code.svg"
+  url          = "http://localhost:13337?folder=/home/coder"
+  subdomain    = false
+  share        = "owner"
+
+  healthcheck {
+    url       = "http://localhost:13337/healthz"
+    interval  = 3
+    threshold = 10
+  }
 }
 
 resource "docker_volume" "workspaces" {
@@ -31,6 +57,13 @@ resource "docker_volume" "workspaces" {
 
 data "docker_registry_image" "envbuilder" {
   name = "kylecarbs/envbuilder:latest"
+}
+
+data "coder_parameter" "devcontainer" {
+  name    = "Devcontainer repo"
+  type    = "string"
+  mutable = true
+  icon    = "https://git-scm.com/images/logos/downloads/Git-Icon-1788C.png"
 }
 
 resource "docker_image" "envbuilder" {
@@ -47,10 +80,10 @@ resource "docker_container" "workspace" {
   # Hostname makes the shell more user friendly: coder@my-workspace:~$
   hostname = data.coder_workspace.me.name
   env = [
-    "CODER_AGENT_TOKEN=${coder_agent.main.token}",
+    "CODER_AGENT_TOKEN=${coder_agent.coder.token}",
     "CODER_AGENT_URL=${data.coder_workspace.me.access_url}",
-    "GIT_URL=https://github.com/microsoft/vscode-course-sample",
-    "INIT_SCRIPT=${replace(coder_agent.main.init_script, "/localhost|127\\.0\\.0\\.1/", "host.docker.internal")}"
+    "GIT_URL=${data.coder_parameter.devcontainer.value}",
+    "INIT_SCRIPT=${replace(coder_agent.coder.init_script, "/localhost|127\\.0\\.0\\.1/", "host.docker.internal")}"
   ]
   host {
     host = "host.docker.internal"

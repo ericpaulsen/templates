@@ -136,7 +136,7 @@ git clone --progress https://owo.codes/${data.coder_parameter.repo.value}
 
 # install and start code-server
 curl -fsSL https://code-server.dev/install.sh | sh
-code-server --auth none --port 13337
+code-server --auth none --port 13337 >/dev/null 2>&1 &
 
   EOT
 
@@ -173,7 +173,7 @@ code-server --auth none --port 13337
 resource "coder_app" "code-server" {
   agent_id     = coder_agent.coder.id
   slug         = "code-server"
-  display_name = "VS Code"
+  display_name = "VS Code Browser"
   icon         = "/icon/code.svg"
   url          = "http://localhost:13337?folder=/home/coder"
   subdomain    = false
