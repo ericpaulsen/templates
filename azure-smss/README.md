@@ -24,7 +24,7 @@ authenticate [consult the Terraform docs](https://registry.terraform.io/provider
 This template depends on the Azure CLI tool (`az`) to start and stop the Windows VM. Ensure this
 tool is installed and available in the path on the machine that runs coderd.
 
-[Microsoft's RDP client](https://learn.microsoft.com/en-us/windows-server/remote/remote-desktop-services/clients/remote-desktop-clients) must be installed on the local machine to access the workspace. CoRD RDP client did not connect.
+[Microsoft's RDP client](https://learn.microsoft.com/en-us/windows-server/remote/remote-desktop-services/clients/remote-desktop-clients) must be installed on the local machine to access the workspace.
 
 ## Accessing the Desktop
 
