@@ -196,9 +196,6 @@ resource "kubernetes_pod" "main" {
       image             = local.image
       image_pull_policy = "Always"
       command           = ["sh", "-c", coder_agent.coder.init_script]
-      security_context {
-        run_as_user = "1000"
-      }
       env {
         name  = "CODER_AGENT_TOKEN"
         value = coder_agent.coder.token
