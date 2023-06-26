@@ -27,6 +27,50 @@ data "coder_parameter" "namespace" {
   icon    = "${data.coder_workspace.me.access_url}/icon/k8s.png"
 }
 
+data "coder_parameter" "image" {
+  name = "workspaces_image"
+  type = "string"
+  icon = "${data.coder_workspace.me.access_url}/icon/docker.png"
+  option {
+    value = "codercom/enterprise-node:ubuntu"
+    name  = "node"
+  }
+  option {
+    value = "codercom/enterprise-golang:ubuntu"
+    name  = "golang"
+  }
+  option {
+    value = "codercom/enterprise-java:ubuntu"
+    name  = "java"
+  }
+  option {
+    value = "codercom/enterprise-base:ubuntu"
+    name  = "base"
+  }
+}
+
+data "coder_parameter" "repo" {
+  name = "repo"
+  type = "string"
+  icon = "https://git-scm.com/images/logos/downloads/Git-Icon-1788C.png"
+  option {
+    value = "sharkymark/coder-react.git"
+    name  = "coder-react"
+  }
+  option {
+    value = "coder/coder.git"
+    name  = "coder"
+  }
+  option {
+    value = "coder/code-server.git"
+    name  = "code-server"
+  }
+  option {
+    value = "sharkymark/commissions.git"
+    name  = "commissions"
+  }
+}
+
 data "coder_parameter" "cpu" {
   name = "cpu"
   icon = "https://cdn-icons-png.flaticon.com/512/4617/4617522.png"
@@ -97,12 +141,23 @@ resource "coder_agent" "coder" {
   startup_script = <<EOT
 #!/bin/bash
 
+# clone repo
+mkdir -p ~/.ssh
+ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
+coder dotfiles data.coder_parameter.dotfiles.value
+git clone --progress git@github.com:${data.coder_parameter.repo.value}
+
+# install and start code-server
+curl -fsSL https://code-server.dev/install.sh | sh
+code-server --auth none --port 13337 >/dev/null 2>&1 &
+
 export PATH="$HOME/.local/bin:$PATH"
 
-# start code-server
-code-server --auth none --port 13337  >/dev/null 2>&1 &
+# install and start airflow
+pip install "apache-airflow[celery]==2.5.3" --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.5.3/constraints-3.7.txt"
 
-# start airflow
+export 
+
 airflow standalone >/dev/null 2>&1 &
 
   EOT  
@@ -153,17 +208,16 @@ resource "kubernetes_pod" "main" {
   }
   spec {
     security_context {
-      run_as_user  = 1000
-      run_as_group = 1000
+      run_as_user = "1000"
+      fs_group    = "1000"
     }
     container {
       name              = "coder-container"
-      image             = "docker.io/ericpaulsen/code-server-airflow:latest"
+      image             = "docker.io/${data.coder_parameter.image.value}"
       image_pull_policy = "Always"
       command           = ["sh", "-c", coder_agent.coder.init_script]
       security_context {
-        run_as_user  = 1000
-        run_as_group = 1000
+        run_as_user = "1000"
       }
       env {
         name  = "CODER_AGENT_TOKEN"
@@ -202,7 +256,6 @@ resource "kubernetes_persistent_volume_claim" "home-directory" {
     name      = "home-coder-${data.coder_workspace.me.owner}-${data.coder_workspace.me.name}"
     namespace = data.coder_parameter.namespace.value
   }
-  wait_until_bound = false
   spec {
     access_modes = ["ReadWriteOnce"]
     resources {
@@ -234,7 +287,11 @@ resource "coder_metadata" "workspace_info" {
   }
   item {
     key   = "image"
-    value = "docker.io/ericpaulsen/code-server-airflow:latest"
+    value = "docker.io/${data.coder_parameter.image.value}"
+  }
+  item {
+    key   = "repo cloned"
+    value = "docker.io/${data.coder_parameter.repo.value}"
   }
   item {
     key   = "disk"

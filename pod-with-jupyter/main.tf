@@ -2,18 +2,23 @@ terraform {
   required_providers {
     coder = {
       source  = "coder/coder"
-      version = "~> 0.6.9"
+      version = "~> 0.8.3"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 2.12.1"
+      version = "~> 2.18.0"
     }
   }
+}
+
+provider "coder" {
+  feature_use_managed_variables = true
 }
 
 variable "use_kubeconfig" {
   type        = bool
   sensitive   = true
+  default     = false
   description = <<-EOF
   Use host kubeconfig? (true/false)
 
@@ -25,75 +30,122 @@ variable "use_kubeconfig" {
   EOF
 }
 
-variable "workspaces_namespace" {
-  type        = string
-  sensitive   = false
-  description = "The namespace to create workspaces in (must exist prior to creating workspaces)"
-  default     = "oss"
-}
+data "coder_workspace" "me" {}
 
-variable "dotfiles_uri" {
-  description = <<-EOF
-  Dotfiles repo URI (optional)
-
-  see https://dotfiles.github.io
-  EOF
-  default     = "git@github.com:sharkymark/dotfiles.git"
+data "coder_parameter" "namespace" {
+  name    = "namespace"
+  type    = "string"
+  default = "eric-oss"
+  icon    = "${data.coder_workspace.me.access_url}/icon/k8s.png"
 }
 
 locals {
-  jupyter-type-arg = var.jupyter == "notebook" ? "Notebook" : "Server"
+  jupyter-type-arg = data.coder_parameter.jupyter.value == "notebook" ? "Notebook" : "Server"
 }
 
-variable "jupyter" {
-  description = "Jupyter IDE type"
-  default     = "lab"
-  validation {
-    condition = contains([
-      "notebook",
-      "lab",
-    ], var.jupyter)
-    error_message = "Invalid Jupyter!"
+data "coder_parameter" "jupyter" {
+  name = "jupyter"
+  type = "string"
+  option {
+    value = "notebook"
+    name  = "Jupyter Notebook"
+  }
+  option {
+    value = "lab"
+    name  = "JupyterLab"
   }
 }
 
-variable "cpu" {
-  description = "CPU (__ cores)"
-  default     = 1
-  validation {
-    condition = contains([
-      "1",
-      "2",
-    ], var.cpu)
-    error_message = "Invalid cpu!"
+data "coder_parameter" "repo" {
+  name    = "repo"
+  type    = "string"
+  icon    = "https://git-scm.com/images/logos/downloads/Git-Icon-1788C.png"
+  default = "eric/pandas_automl"
+  option {
+    value = "eric/cdr-terraform"
+    name  = "cdr-terraform"
+  }
+  option {
+    value = "eric/coder-upgrade"
+    name  = "coder-upgrade"
+  }
+  option {
+    value = "eric/pandas_automl"
+    name  = "pandas-automl"
+  }
+  option {
+    value = "eric/react-demo"
+    name  = "react"
   }
 }
 
-variable "memory" {
-  description = "Memory (__ GB)"
-  default     = 2
-  validation {
-    condition = contains([
-      "1",
-      "2",
-      "4"
-    ], var.memory)
-    error_message = "Invalid memory!"
+data "coder_parameter" "cpu" {
+  name = "cpu"
+  icon = "https://cdn-icons-png.flaticon.com/512/4617/4617522.png"
+  option {
+    value = "2"
+    name  = "2 cores"
+  }
+  option {
+    value = "4"
+    name  = "4 cores"
+  }
+  option {
+    value = "6"
+    name  = "6 cores"
+  }
+  option {
+    value = "8"
+    name  = "8 cores"
   }
 }
 
-variable "disk_size" {
-  description = "Disk size (__ GB)"
-  default     = 10
+data "coder_parameter" "memory" {
+  name = "memory"
+  icon = "https://cdn-icons-png.flaticon.com/512/74/74150.png"
+  option {
+    value = "2"
+    name  = "2 GB"
+  }
+  option {
+    value = "4"
+    name  = "4 GB"
+  }
+  option {
+    value = "6"
+    name  = "6 GB"
+  }
+  option {
+    value = "8"
+    name  = "8 GB"
+  }
 }
 
+data "coder_parameter" "disk_size" {
+  name = "disk_size"
+  icon = "https://cdn-icons-png.flaticon.com/512/4891/4891697.png"
+  option {
+    value = "10"
+    name  = "10 GB"
+  }
+  option {
+    value = "20"
+    name  = "20 GB"
+  }
+  option {
+    value = "30"
+    name  = "30 GB"
+  }
+  option {
+    value = "40"
+    name  = "40 GB"
+  }
+}
 
 provider "kubernetes" {
   # Authenticate via ~/.kube/config or a Coder-specific ServiceAccount, depending on admin preferences
   config_path = var.use_kubeconfig == true ? "~/.kube/config" : null
 }
-
-data "coder_workspace" "me" {}
 
 resource "coder_agent" "coder" {
   os             = "linux"
@@ -103,22 +155,17 @@ resource "coder_agent" "coder" {
 #!/bin/bash
 
 # start jupyter 
-jupyter ${var.jupyter} --${local.jupyter-type-arg}App.token='' --ip='*' &
+jupyter ${data.coder_parameter.jupyter.value} --${local.jupyter-type-arg}App.token='' --ip='*' >/dev/null 2>&1 &
 
 # install code-server
 curl -fsSL https://code-server.dev/install.sh | sh
-code-server --auth none --port 13337 &
+code-server --auth none --port 13337 >/dev/null 2>&1 &
 
 # add some Python libraries
 pip3 install --user pandas &
 
-# use coder CLI to clone and install dotfiles
-coder dotfiles -y ${var.dotfiles_uri} &
-
 # clone repo
-mkdir -p ~/.ssh
-ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
-git clone --progress git@github.com:sharkymark/pandas_automl.git &
+git clone https://owo.codes/${data.coder_parameter.repo.value}.git
 
 # install VS Code extension into code-server
 SERVICE_URL=https://open-vsx.org/vscode/gallery ITEM_URL=https://open-vsx.org/vscode/item code-server --install-extension ms-toolsai.jupyter
@@ -145,8 +192,8 @@ resource "coder_app" "code-server" {
 
 resource "coder_app" "jupyter" {
   agent_id     = coder_agent.coder.id
-  slug         = "jupyter-${var.jupyter}"
-  display_name = "jupyter-${var.jupyter}"
+  slug         = "jupyter"
+  display_name = "jupyter-${data.coder_parameter.jupyter.value}"
   icon         = "/icon/jupyter.svg"
   url          = "http://localhost:8888/"
   share        = "owner"
@@ -163,7 +210,7 @@ resource "kubernetes_pod" "main" {
   count = data.coder_workspace.me.start_count
   metadata {
     name      = "coder-${data.coder_workspace.me.owner}-${lower(data.coder_workspace.me.name)}"
-    namespace = var.workspaces_namespace
+    namespace = data.coder_parameter.namespace.value
   }
   spec {
     security_context {
@@ -188,8 +235,8 @@ resource "kubernetes_pod" "main" {
           memory = "250Mi"
         }
         limits = {
-          cpu    = "${var.cpu}"
-          memory = "${var.memory}G"
+          cpu    = "${data.coder_parameter.cpu.value}"
+          memory = "${data.coder_parameter.memory.value}G"
         }
       }
       volume_mount {
@@ -209,13 +256,13 @@ resource "kubernetes_pod" "main" {
 resource "kubernetes_persistent_volume_claim" "home-directory" {
   metadata {
     name      = "home-coder-${data.coder_workspace.me.owner}-${lower(data.coder_workspace.me.name)}"
-    namespace = var.workspaces_namespace
+    namespace = data.coder_parameter.namespace.value
   }
   spec {
     access_modes = ["ReadWriteOnce"]
     resources {
       requests = {
-        storage = "${var.disk_size}Gi"
+        storage = "${data.coder_parameter.disk_size.value}Gi"
       }
     }
   }
@@ -226,27 +273,15 @@ resource "coder_metadata" "workspace_info" {
   resource_id = kubernetes_pod.main[0].id
   item {
     key   = "CPU"
-    value = "${var.cpu} cores"
+    value = "${data.coder_parameter.cpu.value} cores"
   }
   item {
     key   = "memory"
-    value = "${var.memory}GB"
+    value = "${data.coder_parameter.memory.value}GB"
   }
   item {
     key   = "disk"
-    value = "${var.disk_size}GiB"
-  }
-  item {
-    key   = "image"
-    value = "codercom/enterprise-jupyter:ubuntu"
-  }
-  item {
-    key   = "repo cloned"
-    value = "docker.io/sharkymark/pandas_automl.git"
-  }
-  item {
-    key   = "jupyter"
-    value = var.jupyter
+    value = "${data.coder_parameter.disk_size.value}GiB"
   }
   item {
     key   = "volume"
