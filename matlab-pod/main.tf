@@ -18,23 +18,7 @@ locals {
   image          = "docker.io/marktmilligan/matlab:r2023a"
 }
 
-provider "coder" {
-  feature_use_managed_variables = "true"
-}
-
-variable "use_kubeconfig" {
-  type        = bool
-  description = <<-EOF
-  Use host kubeconfig? (true/false)
-
-  Set this to false if the Coder host is itself running as a Pod on the same
-  Kubernetes cluster as you are deploying workspaces to.
-
-  Set this to true if the Coder host is running outside the Kubernetes cluster
-  for workspaces.  A valid "~/.kube/config" must be present on the Coder host.
-  EOF
-  default     = false
-}
+provider "coder" {}
 
 data "coder_parameter" "dotfiles_url" {
   name        = "Dotfiles URL"
@@ -46,8 +30,6 @@ data "coder_parameter" "dotfiles_url" {
 }
 
 provider "kubernetes" {
-  # Authenticate via ~/.kube/config or a Coder-specific ServiceAccount, depending on admin preferences
-  config_path = var.use_kubeconfig == true ? "~/.kube/config" : null
 }
 
 data "coder_workspace" "me" {}
