@@ -1,0 +1,15 @@
+[Unit]
+Description=Coder
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/coder agent
+Restart=always
+RestartSec=3
+Environment="CODER_AGENT_TOKEN=CODER_TOKEN_VALUE"
+Environment="CODER_AGENT_URL=CODER_URL_VALUE"
+Environment="CODER_AGENT_AUTH=token"
+
+[Install]
+WantedBy=default.target
