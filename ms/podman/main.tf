@@ -3,70 +3,157 @@ terraform {
     coder = {
       source = "coder/coder"
     }
-    docker = {
-      source = "kreuzwerker/docker"
+  }
+}
+
+provider "local" {}
+
+locals {
+  username = data.coder_workspace.me.owner
+  name = data.coder_workspace.me.id
+}
+
+resource "terraform_data" "always" {
+  input = timestamp()
+}
+
+resource "terraform_data" "stop" {
+  lifecycle {
+    replace_triggered_by = [terraform_data.always]
+  }
+  provisioner "local-exec" {
+    command = "stop.sh"
+    interpreter = ["bash"]
+    environment = {
+      CONTAINER_NAME = data.coder_workspace.me.id
     }
   }
 }
 
-provider "docker" {
-  host = "unix:///run/podman.sock"
-}
-
-provider "coder" {}
-
-data "coder_workspace" "me" {}
-
-data "coder_parameter" "os" {
-  name         = "os"
-  display_name = "Operating system"
-  description  = "The operating system to use for your workspace."
-  default      = "ubuntu"
-  option {
-    name  = "Ubuntu"
-    value = "ubuntu"
-    icon  = "/icon/ubuntu.svg"
-  }
-  option {
-    name  = "Fedora"
-    value = "fedora"
-    icon  = "/icon/fedora.svg"
+resource "terraform_data" "delete" {
+  input = data.coder_workspace.me.id
+  provisioner "local-exec" {
+    command = "stop.sh"
+    interpreter = ["bash"]
+    environment = {
+      CONTAINER_NAME = self.input
+    }
+    when = destroy
   }
 }
 
-data "coder_parameter" "repo" {
-  name    = "repo"
-  type    = "string"
-  default = "eric/react-demo.git"
-  icon    = "https://git-scm.com/images/logos/downloads/Git-Icon-1788C.png"
+resource "terraform_data" "start" {
+  lifecycle {
+    replace_triggered_by = [terraform_data.always]
+  }
+  count = "${data.coder_workspace.me.start_count}"
+  provisioner "local-exec" {
+    command = "echo '${coder_agent.main.init_script}' > init.sh && chmod a+x init.sh && podman run -d -v ./init.sh:/tmp/init.sh -e CODER_AGENT_TOKEN=\"${coder_agent.main.token}\" --name=\"${data.coder_workspace.me.id}\" codercom/enterprise-base:ubuntu /tmp/init.sh"
+    interpreter = ["bash", "-c"]
+  }
+	 depends_on=[terraform_data.stop]
 }
 
-resource "coder_agent" "dev" {
-  arch           = "amd64"
+data "coder_provisioner" "me" {
+}
+
+data "coder_workspace" "me" {
+}
+
+resource "coder_agent" "main" {
+  arch           = data.coder_provisioner.me.arch
   os             = "linux"
-  startup_script = <<EOT
-    #!/bin/bash
+  startup_script = <<-EOT
+    set -e
 
-    # Run once to avoid unnecessary warning: "/" is not a shared mount
-    podman ps
-
-    # clone repo
-    mkdir -p ~/.ssh
-    ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
-    git clone ${data.coder_parameter.repo.value}
-
-    # install code-server
-    curl -fsSL https://code-server.dev/install.sh | sh
-    code-server --auth none --port 13337 &
-
+    # install and start code-server
+    curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/tmp/code-server --version 4.19.1
+    /tmp/code-server/bin/code-server --auth none --port 13337 >/tmp/code-server.log 2>&1 &
   EOT
+
+  # These environment variables allow you to make Git commits right away after creating a
+  # workspace. Note that they take precedence over configuration defined in ~/.gitconfig!
+  # You can remove this block if you'd prefer to configure Git manually or using
+  # dotfiles. (see docs/dotfiles.md)
+  env = {
+    GIT_AUTHOR_NAME     = coalesce(data.coder_workspace.me.owner_name, data.coder_workspace.me.owner)
+    GIT_AUTHOR_EMAIL    = "${data.coder_workspace.me.owner_email}"
+    GIT_COMMITTER_NAME  = coalesce(data.coder_workspace.me.owner_name, data.coder_workspace.me.owner)
+    GIT_COMMITTER_EMAIL = "${data.coder_workspace.me.owner_email}"
+  }
+
+  # The following metadata blocks are optional. They are used to display
+  # information about your workspace in the dashboard. You can remove them
+  # if you don't want to display any information.
+  # For basic resources, you can use the `coder stat` command.
+  # If you need more control, you can write your own script.
+  metadata {
+    display_name = "CPU Usage"
+    key          = "0_cpu_usage"
+    script       = "coder stat cpu"
+    interval     = 10
+    timeout      = 1
+  }
+
+  metadata {
+    display_name = "RAM Usage"
+    key          = "1_ram_usage"
+    script       = "coder stat mem"
+    interval     = 10
+    timeout      = 1
+  }
+
+  metadata {
+    display_name = "Home Disk"
+    key          = "3_home_disk"
+    script       = "coder stat disk --path $${HOME}"
+    interval     = 60
+    timeout      = 1
+  }
+
+  metadata {
+    display_name = "CPU Usage (Host)"
+    key          = "4_cpu_usage_host"
+    script       = "coder stat cpu --host"
+    interval     = 10
+    timeout      = 1
+  }
+
+  metadata {
+    display_name = "Memory Usage (Host)"
+    key          = "5_mem_usage_host"
+    script       = "coder stat mem --host"
+    interval     = 10
+    timeout      = 1
+  }
+
+  metadata {
+    display_name = "Load Average (Host)"
+    key          = "6_load_host"
+    # get load avg scaled by number of cores
+    script   = <<EOT
+      echo "`cat /proc/loadavg | awk '{ print $1 }'` `nproc`" | awk '{ printf "%0.2f", $1/$2 }'
+    EOT
+    interval = 60
+    timeout  = 1
+  }
+
+  metadata {
+    display_name = "Swap Usage (Host)"
+    key          = "7_swap_host"
+    script       = <<EOT
+      free -b | awk '/^Swap/ { printf("%.1f/%.1f", $3/1024.0/1024.0/1024.0, $2/1024.0/1024.0/1024.0) }'
+    EOT
+    interval     = 10
+    timeout      = 1
+  }
 }
 
 resource "coder_app" "code-server" {
-  agent_id     = coder_agent.dev.id
+  agent_id     = coder_agent.main.id
   slug         = "code-server"
-  display_name = "VS Code"
-  url          = "http://localhost:13337/?folder=/home/coder"
+  display_name = "code-server"
+  url          = "http://localhost:13337/?folder=/home/${local.username}"
   icon         = "/icon/code.svg"
   subdomain    = false
   share        = "owner"
@@ -74,43 +161,6 @@ resource "coder_app" "code-server" {
   healthcheck {
     url       = "http://localhost:13337/healthz"
     interval  = 5
-    threshold = 15
+    threshold = 6
   }
-}
-
-resource "docker_container" "workspace" {
-  count = data.coder_workspace.me.start_count
-  image = "ghcr.io/coder/podman:${data.coder_parameter.os.value}"
-  # Uses lower() to avoid Docker restriction on container names.
-  name     = "coder-${data.coder_workspace.me.owner}-${lower(data.coder_workspace.me.name)}"
-  hostname = lower(data.coder_workspace.me.name)
-  dns      = ["1.1.1.1"]
-
-  # Use the docker gateway if the access URL is 127.0.0.1
-  #entrypoint = ["sh", "-c", replace(coder_agent.dev.init_script, "127.0.0.1", "host.docker.internal")]
-
-  # Use the docker gateway if the access URL is 127.0.0.1
-  command       = ["/bin/bash", "-c", coder_agent.dev.init_script]
-  env           = ["CODER_AGENT_TOKEN=${coder_agent.dev.token}"]
-  security_opts = ["seccomp=unconfined"]
-  privileged    = true
-
-  volumes {
-    volume_name    = docker_volume.coder_volume.name
-    container_path = "/home/coder/"
-    read_only      = false
-  }
-
-  host {
-    host = "host.docker.internal"
-    ip   = "host-gateway"
-  }
-}
-
-resource "docker_volume" "coder_volume" {
-  name = "coder-${data.coder_workspace.me.owner}-${data.coder_workspace.me.name}"
-}
-
-resource "docker_volume" "sysbox" {
-  name = "sysbox"
 }
